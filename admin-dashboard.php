@@ -12,20 +12,16 @@ require_once "config/database.php";
 */
 
 if (!isset($_SESSION["user_id"])) {
-
     header("Location: login.php");
     exit;
-
 }
 
 if (
     !isset($_SESSION["role"]) ||
     $_SESSION["role"] !== "admin"
 ) {
-
     header("Location: dashboard.php");
     exit;
-
 }
 
 
@@ -57,8 +53,7 @@ if ($result) {
 
     $row = mysqli_fetch_assoc($result);
 
-    $total_users = (int)$row["total"];
-
+    $total_users = (int) $row["total"];
 }
 
 
@@ -82,8 +77,7 @@ if ($result) {
 
     $row = mysqli_fetch_assoc($result);
 
-    $total_managers = (int)$row["total"];
-
+    $total_managers = (int) $row["total"];
 }
 
 
@@ -107,8 +101,7 @@ if ($result) {
 
     $row = mysqli_fetch_assoc($result);
 
-    $total_members = (int)$row["total"];
-
+    $total_members = (int) $row["total"];
 }
 
 
@@ -131,8 +124,7 @@ if ($result) {
 
     $row = mysqli_fetch_assoc($result);
 
-    $total_projects = (int)$row["total"];
-
+    $total_projects = (int) $row["total"];
 }
 
 
@@ -156,8 +148,7 @@ if ($result) {
 
     $row = mysqli_fetch_assoc($result);
 
-    $active_projects = (int)$row["total"];
-
+    $active_projects = (int) $row["total"];
 }
 
 
@@ -181,8 +172,7 @@ if ($result) {
 
     $row = mysqli_fetch_assoc($result);
 
-    $completed_projects = (int)$row["total"];
-
+    $completed_projects = (int) $row["total"];
 }
 
 
@@ -206,8 +196,7 @@ if ($result) {
 
     $row = mysqli_fetch_assoc($result);
 
-    $pending_tasks = (int)$row["total"];
-
+    $pending_tasks = (int) $row["total"];
 }
 
 
@@ -231,8 +220,7 @@ if ($result) {
 
     $row = mysqli_fetch_assoc($result);
 
-    $completed_tasks = (int)$row["total"];
-
+    $completed_tasks = (int) $row["total"];
 }
 
 
@@ -253,14 +241,10 @@ $query = "
         p.start_date,
         p.end_date,
         u.full_name AS manager_name
-
     FROM projects p
-
     INNER JOIN users u
         ON p.manager_id = u.id
-
     ORDER BY p.created_at DESC
-
     LIMIT 5
 ";
 
@@ -271,9 +255,7 @@ if ($result) {
     while ($row = mysqli_fetch_assoc($result)) {
 
         $recent_projects[] = $row;
-
     }
-
 }
 
 
@@ -292,20 +274,13 @@ $query = "
         p.end_date,
         p.priority,
         u.full_name AS manager_name
-
     FROM projects p
-
     INNER JOIN users u
         ON p.manager_id = u.id
-
     WHERE p.end_date IS NOT NULL
-
-    AND p.end_date >= CURDATE()
-
-    AND p.status != 'completed'
-
+      AND p.end_date >= CURDATE()
+      AND p.status != 'completed'
     ORDER BY p.end_date ASC
-
     LIMIT 5
 ";
 
@@ -316,9 +291,7 @@ if ($result) {
     while ($row = mysqli_fetch_assoc($result)) {
 
         $upcoming_deadlines[] = $row;
-
     }
-
 }
 
 
@@ -336,14 +309,10 @@ $query = "
         a.description,
         a.created_at,
         u.full_name
-
     FROM activity_logs a
-
     INNER JOIN users u
         ON a.user_id = u.id
-
     ORDER BY a.created_at DESC
-
     LIMIT 6
 ";
 
@@ -354,9 +323,43 @@ if ($result) {
     while ($row = mysqli_fetch_assoc($result)) {
 
         $activities[] = $row;
-
     }
+}
 
+
+/*
+|--------------------------------------------------------------------------
+| PROJECT COMPLETION PERCENTAGE
+|--------------------------------------------------------------------------
+*/
+
+$project_completion = 0;
+
+if ($total_projects > 0) {
+
+    $project_completion =
+        round(
+            ($completed_projects / $total_projects) * 100
+        );
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| TASK COMPLETION PERCENTAGE
+|--------------------------------------------------------------------------
+*/
+
+$task_completion = 0;
+
+$total_tasks = $pending_tasks + $completed_tasks;
+
+if ($total_tasks > 0) {
+
+    $task_completion =
+        round(
+            ($completed_tasks / $total_tasks) * 100
+        );
 }
 
 ?>
@@ -383,6 +386,90 @@ if ($result) {
         href="assets/css/style.css"
     >
 
+    <style>
+
+        /*
+        |--------------------------------------------------------------------------
+        | DASHBOARD EXTRA STYLES
+        |--------------------------------------------------------------------------
+        */
+
+        .progress-wrapper {
+            margin-top: 20px;
+        }
+
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .progress-label span {
+            color: #6b7280;
+        }
+
+        .progress-label strong {
+            color: #111827;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 9px;
+            background: #e5e7eb;
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 20px;
+            background: #111827;
+        }
+
+        .overview-number {
+            font-size: 28px;
+            font-weight: 700;
+            color: #111827;
+        }
+
+        .overview-description {
+            color: #6b7280;
+            font-size: 13px;
+            margin-top: 4px;
+        }
+
+        .dashboard-stat-link {
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        .dashboard-stat-link:hover .stat-card {
+            transform: translateY(-2px);
+        }
+
+        .stat-card {
+            transition: transform 0.2s ease;
+        }
+
+        .deadline-manager {
+            display: block;
+            color: #9ca3af;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .activity-action {
+            font-size: 12px;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+    </style>
+
 </head>
 
 
@@ -397,6 +484,9 @@ if ($result) {
     ====================================================== -->
 
     <aside class="sidebar">
+
+
+        <!-- LOGO -->
 
         <div class="sidebar-logo">
 
@@ -419,6 +509,8 @@ if ($result) {
         </div>
 
 
+        <!-- NAVIGATION -->
+
         <nav class="sidebar-nav">
 
 
@@ -426,6 +518,8 @@ if ($result) {
                 MAIN
             </p>
 
+
+            <!-- DASHBOARD -->
 
             <a
                 href="admin-dashboard.php"
@@ -441,6 +535,8 @@ if ($result) {
             </a>
 
 
+            <!-- PROJECTS -->
+
             <a
                 href="projects.php"
                 class="nav-item"
@@ -455,8 +551,10 @@ if ($result) {
             </a>
 
 
+            <!-- TASKS -->
+
             <a
-                href="#"
+                href="tasks.php"
                 class="nav-item"
             >
 
@@ -474,8 +572,10 @@ if ($result) {
             </p>
 
 
+            <!-- USERS -->
+
             <a
-                href="#"
+                href="users.php"
                 class="nav-item"
             >
 
@@ -488,8 +588,10 @@ if ($result) {
             </a>
 
 
+            <!-- PROJECT MANAGERS -->
+
             <a
-                href="#"
+                href="users.php?role=project_manager"
                 class="nav-item"
             >
 
@@ -501,6 +603,8 @@ if ($result) {
 
             </a>
 
+
+            <!-- REPORTS -->
 
             <a
                 href="reports.php"
@@ -521,6 +625,8 @@ if ($result) {
             </p>
 
 
+            <!-- SETTINGS -->
+
             <a
                 href="#"
                 class="nav-item"
@@ -534,6 +640,8 @@ if ($result) {
 
             </a>
 
+
+            <!-- PROFILE -->
 
             <a
                 href="profile.php"
@@ -552,6 +660,8 @@ if ($result) {
         </nav>
 
 
+        <!-- LOGOUT -->
+
         <div class="sidebar-bottom">
 
             <a
@@ -569,6 +679,7 @@ if ($result) {
 
         </div>
 
+
     </aside>
 
 
@@ -580,12 +691,15 @@ if ($result) {
     <main class="main-content">
 
 
-        <!-- TOPBAR -->
+        <!-- =================================================
+             TOPBAR
+        ================================================== -->
 
         <header class="topbar">
 
 
             <div class="topbar-left">
+
 
                 <button
                     class="mobile-menu"
@@ -608,7 +722,9 @@ if ($result) {
 
                 </div>
 
+
             </div>
+
 
 
             <div class="topbar-right">
@@ -672,14 +788,16 @@ if ($result) {
 
 
 
-        <!-- =====================================================
-             DASHBOARD CONTENT
-        ====================================================== -->
+        <!-- =================================================
+             DASHBOARD
+        ================================================== -->
 
         <section class="dashboard-content">
 
 
-            <!-- HEADER -->
+            <!-- =================================================
+                 PAGE HEADER
+            ================================================== -->
 
             <div class="page-header">
 
@@ -692,10 +810,12 @@ if ($result) {
 
 
                     <h1>
+
                         Welcome back,
                         <?= htmlspecialchars(
                             $admin_name
                         ) ?>!
+
                     </h1>
 
 
@@ -723,100 +843,290 @@ if ($result) {
 
 
             <!-- =================================================
-                 STAT CARDS
+                 STATISTICS
             ================================================== -->
 
             <div class="stats-grid">
 
 
-                <!-- USERS -->
+                <!-- TOTAL USERS -->
 
-                <div class="stat-card">
+                <a
+                    href="users.php"
+                    class="dashboard-stat-link"
+                >
 
-                    <div class="stat-icon">
-                        ♙
+                    <div class="stat-card">
+
+                        <div class="stat-icon">
+                            ♙
+                        </div>
+
+                        <div class="stat-info">
+
+                            <span>
+                                Total Users
+                            </span>
+
+                            <strong>
+                                <?= $total_users ?>
+                            </strong>
+
+                        </div>
+
                     </div>
 
-                    <div class="stat-info">
+                </a>
 
-                        <span>
-                            Total Users
-                        </span>
 
-                        <strong>
-                            <?= $total_users ?>
-                        </strong>
+
+                <!-- TOTAL PROJECTS -->
+
+                <a
+                    href="projects.php"
+                    class="dashboard-stat-link"
+                >
+
+                    <div class="stat-card">
+
+                        <div class="stat-icon">
+                            ▣
+                        </div>
+
+                        <div class="stat-info">
+
+                            <span>
+                                Total Projects
+                            </span>
+
+                            <strong>
+                                <?= $total_projects ?>
+                            </strong>
+
+                        </div>
 
                     </div>
 
-                </div>
+                </a>
 
 
-                <!-- MANAGERS -->
 
-                <div class="stat-card">
+                <!-- ACTIVE PROJECTS -->
 
-                    <div class="stat-icon">
-                        ♚
+                <a
+                    href="projects.php"
+                    class="dashboard-stat-link"
+                >
+
+                    <div class="stat-card">
+
+                        <div class="stat-icon">
+                            ↗
+                        </div>
+
+                        <div class="stat-info">
+
+                            <span>
+                                Active Projects
+                            </span>
+
+                            <strong>
+                                <?= $active_projects ?>
+                            </strong>
+
+                        </div>
+
                     </div>
 
-                    <div class="stat-info">
+                </a>
 
-                        <span>
-                            Project Managers
-                        </span>
 
-                        <strong>
+
+                <!-- PENDING TASKS -->
+
+                <a
+                    href="tasks.php"
+                    class="dashboard-stat-link"
+                >
+
+                    <div class="stat-card">
+
+                        <div class="stat-icon">
+                            ✓
+                        </div>
+
+                        <div class="stat-info">
+
+                            <span>
+                                Pending Tasks
+                            </span>
+
+                            <strong>
+                                <?= $pending_tasks ?>
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+                </a>
+
+
+            </div>
+
+
+
+            <!-- =================================================
+                 USER OVERVIEW
+            ================================================== -->
+
+            <div class="dashboard-grid">
+
+
+                <!-- PROJECT MANAGERS -->
+
+                <div class="dashboard-card">
+
+
+                    <div class="card-header">
+
+                        <div>
+
+                            <h2>
+                                Project Managers
+                            </h2>
+
+                            <p>
+                                Managers currently registered
+                            </p>
+
+                        </div>
+
+                        <span class="overview-number">
                             <?= $total_managers ?>
-                        </strong>
+                        </span>
 
                     </div>
+
+
+                    <div class="progress-wrapper">
+
+
+                        <div class="progress-label">
+
+                            <span>
+                                Managers
+                            </span>
+
+                            <strong>
+                                <?= $total_managers ?>
+                            </strong>
+
+                        </div>
+
+
+                        <div class="progress-bar">
+
+                            <?php
+
+                            $manager_percentage = 0;
+
+                            if ($total_users > 0) {
+
+                                $manager_percentage =
+                                    round(
+                                        ($total_managers / $total_users) * 100
+                                    );
+                            }
+
+                            ?>
+
+                            <div
+                                class="progress-fill"
+                                style="width: <?= $manager_percentage ?>%;"
+                            ></div>
+
+                        </div>
+
+
+                    </div>
+
 
                 </div>
 
 
-                <!-- MEMBERS -->
 
-                <div class="stat-card">
+                <!-- TEAM MEMBERS -->
 
-                    <div class="stat-icon">
-                        👥
-                    </div>
+                <div class="dashboard-card">
 
-                    <div class="stat-info">
 
-                        <span>
-                            Team Members
-                        </span>
+                    <div class="card-header">
 
-                        <strong>
+                        <div>
+
+                            <h2>
+                                Team Members
+                            </h2>
+
+                            <p>
+                                Members currently registered
+                            </p>
+
+                        </div>
+
+                        <span class="overview-number">
                             <?= $total_members ?>
-                        </strong>
-
-                    </div>
-
-                </div>
-
-
-                <!-- PROJECTS -->
-
-                <div class="stat-card">
-
-                    <div class="stat-icon">
-                        ▣
-                    </div>
-
-                    <div class="stat-info">
-
-                        <span>
-                            Total Projects
                         </span>
 
-                        <strong>
-                            <?= $total_projects ?>
-                        </strong>
+                    </div>
+
+
+                    <div class="progress-wrapper">
+
+
+                        <div class="progress-label">
+
+                            <span>
+                                Team Members
+                            </span>
+
+                            <strong>
+                                <?= $total_members ?>
+                            </strong>
+
+                        </div>
+
+
+                        <div class="progress-bar">
+
+
+                            <?php
+
+                            $member_percentage = 0;
+
+                            if ($total_users > 0) {
+
+                                $member_percentage =
+                                    round(
+                                        ($total_members / $total_users) * 100
+                                    );
+                            }
+
+                            ?>
+
+
+                            <div
+                                class="progress-fill"
+                                style="width: <?= $member_percentage ?>%;"
+                            ></div>
+
+
+                        </div>
+
 
                     </div>
+
 
                 </div>
 
@@ -839,6 +1149,7 @@ if ($result) {
 
                     <div class="card-header">
 
+
                         <div>
 
                             <h2>
@@ -850,6 +1161,7 @@ if ($result) {
                             </p>
 
                         </div>
+
 
                     </div>
 
@@ -899,6 +1211,35 @@ if ($result) {
                     </div>
 
 
+                    <div class="progress-wrapper">
+
+
+                        <div class="progress-label">
+
+                            <span>
+                                Project Completion
+                            </span>
+
+                            <strong>
+                                <?= $project_completion ?>%
+                            </strong>
+
+                        </div>
+
+
+                        <div class="progress-bar">
+
+                            <div
+                                class="progress-fill"
+                                style="width: <?= $project_completion ?>%;"
+                            ></div>
+
+                        </div>
+
+
+                    </div>
+
+
                 </div>
 
 
@@ -909,6 +1250,7 @@ if ($result) {
 
 
                     <div class="card-header">
+
 
                         <div>
 
@@ -921,6 +1263,7 @@ if ($result) {
                             </p>
 
                         </div>
+
 
                     </div>
 
@@ -950,6 +1293,48 @@ if ($result) {
                             <strong>
                                 <?= $completed_tasks ?>
                             </strong>
+
+                        </div>
+
+
+                        <div class="task-stat">
+
+                            <span>
+                                Total
+                            </span>
+
+                            <strong>
+                                <?= $total_tasks ?>
+                            </strong>
+
+                        </div>
+
+
+                    </div>
+
+
+                    <div class="progress-wrapper">
+
+
+                        <div class="progress-label">
+
+                            <span>
+                                Task Completion
+                            </span>
+
+                            <strong>
+                                <?= $task_completion ?>%
+                            </strong>
+
+                        </div>
+
+
+                        <div class="progress-bar">
+
+                            <div
+                                class="progress-fill"
+                                style="width: <?= $task_completion ?>%;"
+                            ></div>
 
                         </div>
 
@@ -996,6 +1381,7 @@ if ($result) {
 
 
                 </div>
+
 
 
                 <?php if (
@@ -1056,6 +1442,7 @@ if ($result) {
 
                                         <td>
 
+
                                             <div class="project-name">
 
 
@@ -1086,6 +1473,7 @@ if ($result) {
 
 
                                             </div>
+
 
                                         </td>
 
@@ -1122,6 +1510,7 @@ if ($result) {
 
                                         <td>
 
+
                                             <span
                                                 class="priority-badge priority-<?= htmlspecialchars(
                                                     $project["priority"]
@@ -1136,10 +1525,12 @@ if ($result) {
 
                                             </span>
 
+
                                         </td>
 
 
                                         <td>
+
 
                                             <span
                                                 class="status-badge status-<?= htmlspecialchars(
@@ -1158,6 +1549,7 @@ if ($result) {
                                                 ) ?>
 
                                             </span>
+
 
                                         </td>
 
@@ -1182,13 +1574,16 @@ if ($result) {
 
                     <div class="empty-state">
 
+
                         <div class="empty-icon">
                             ▣
                         </div>
 
+
                         <h3>
                             No projects yet
                         </h3>
+
 
                         <p>
                             Create your first project to get started.
@@ -1201,6 +1596,7 @@ if ($result) {
                         >
                             + Create Project
                         </a>
+
 
                     </div>
 
@@ -1226,6 +1622,7 @@ if ($result) {
 
                     <div class="card-header">
 
+
                         <div>
 
                             <h2>
@@ -1238,7 +1635,9 @@ if ($result) {
 
                         </div>
 
+
                     </div>
+
 
 
                     <?php if (
@@ -1260,6 +1659,7 @@ if ($result) {
 
                                     <div>
 
+
                                         <strong>
 
                                             <?= htmlspecialchars(
@@ -1277,6 +1677,17 @@ if ($result) {
                                             ) ?>
 
                                         </span>
+
+
+                                        <small class="deadline-manager">
+
+                                            Manager:
+                                            <?= htmlspecialchars(
+                                                $deadline["manager_name"]
+                                            ) ?>
+
+                                        </small>
+
 
                                     </div>
 
@@ -1310,13 +1721,16 @@ if ($result) {
 
                         <div class="empty-state small">
 
+
                             <div class="empty-icon">
                                 ✓
                             </div>
 
+
                             <p>
                                 No upcoming deadlines.
                             </p>
+
 
                         </div>
 
@@ -1335,6 +1749,7 @@ if ($result) {
 
                     <div class="card-header">
 
+
                         <div>
 
                             <h2>
@@ -1347,7 +1762,9 @@ if ($result) {
 
                         </div>
 
+
                     </div>
+
 
 
                     <?php if (
@@ -1374,6 +1791,7 @@ if ($result) {
 
                                     <div>
 
+
                                         <strong>
 
                                             <?= htmlspecialchars(
@@ -1381,6 +1799,15 @@ if ($result) {
                                             ) ?>
 
                                         </strong>
+
+
+                                        <span class="activity-action">
+
+                                            <?= htmlspecialchars(
+                                                $activity["action"]
+                                            ) ?>
+
+                                        </span>
 
 
                                         <p>
@@ -1400,6 +1827,7 @@ if ($result) {
 
                                         </small>
 
+
                                     </div>
 
 
@@ -1417,13 +1845,16 @@ if ($result) {
 
                         <div class="empty-state small">
 
+
                             <div class="empty-icon">
                                 •
                             </div>
 
+
                             <p>
                                 No recent activity.
                             </p>
+
 
                         </div>
 

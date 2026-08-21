@@ -4,47 +4,39 @@ session_start();
 
 require_once "config/database.php";
 
-
 /*
 |--------------------------------------------------------------------------
-| Authentication
+| PROJECT MANAGER PROTECTION
 |--------------------------------------------------------------------------
 */
 
 if (!isset($_SESSION["user_id"])) {
-
     header("Location: login.php");
     exit;
-
 }
-
 
 if (
     !isset($_SESSION["role"]) ||
     $_SESSION["role"] !== "project_manager"
 ) {
-
     header("Location: dashboard.php");
     exit;
-
 }
-
-
-$manager_id = (int) $_SESSION["user_id"];
 
 
 /*
 |--------------------------------------------------------------------------
-| Manager Information
+| MANAGER INFORMATION
 |--------------------------------------------------------------------------
 */
 
+$manager_id = (int) $_SESSION["user_id"];
 $manager_name = $_SESSION["full_name"] ?? "Project Manager";
 
 
 /*
 |--------------------------------------------------------------------------
-| Total Projects
+| TOTAL PROJECTS
 |--------------------------------------------------------------------------
 */
 
@@ -53,69 +45,43 @@ $total_projects = 0;
 $query = "
     SELECT COUNT(*) AS total
     FROM projects
-    WHERE manager_id = ?
+    WHERE manager_id = $manager_id
 ";
 
-$stmt = mysqli_prepare($conn, $query);
+$result = mysqli_query($conn, $query);
 
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $manager_id
-);
-
-mysqli_stmt_execute($stmt);
-
-$result = mysqli_stmt_get_result($stmt);
-
-if ($row = mysqli_fetch_assoc($result)) {
-
-    $total_projects = $row["total"];
-
+if ($result) {
+    $row = mysqli_fetch_assoc($result);
+    $total_projects = (int) $row["total"];
 }
-
-mysqli_stmt_close($stmt);
 
 
 /*
 |--------------------------------------------------------------------------
-| In Progress Projects
+| ACTIVE PROJECTS
 |--------------------------------------------------------------------------
 */
 
-$in_progress = 0;
+$active_projects = 0;
 
 $query = "
     SELECT COUNT(*) AS total
     FROM projects
-    WHERE manager_id = ?
+    WHERE manager_id = $manager_id
     AND status = 'in_progress'
 ";
 
-$stmt = mysqli_prepare($conn, $query);
+$result = mysqli_query($conn, $query);
 
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $manager_id
-);
-
-mysqli_stmt_execute($stmt);
-
-$result = mysqli_stmt_get_result($stmt);
-
-if ($row = mysqli_fetch_assoc($result)) {
-
-    $in_progress = $row["total"];
-
+if ($result) {
+    $row = mysqli_fetch_assoc($result);
+    $active_projects = (int) $row["total"];
 }
-
-mysqli_stmt_close($stmt);
 
 
 /*
 |--------------------------------------------------------------------------
-| Completed Projects
+| COMPLETED PROJECTS
 |--------------------------------------------------------------------------
 */
 
@@ -124,283 +90,243 @@ $completed_projects = 0;
 $query = "
     SELECT COUNT(*) AS total
     FROM projects
-    WHERE manager_id = ?
+    WHERE manager_id = $manager_id
     AND status = 'completed'
 ";
 
-$stmt = mysqli_prepare($conn, $query);
+$result = mysqli_query($conn, $query);
 
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $manager_id
-);
-
-mysqli_stmt_execute($stmt);
-
-$result = mysqli_stmt_get_result($stmt);
-
-if ($row = mysqli_fetch_assoc($result)) {
-
-    $completed_projects = $row["total"];
-
+if ($result) {
+    $row = mysqli_fetch_assoc($result);
+    $completed_projects = (int) $row["total"];
 }
-
-mysqli_stmt_close($stmt);
 
 
 /*
 |--------------------------------------------------------------------------
-| On Hold Projects
-|--------------------------------------------------------------------------
-*/
-
-$on_hold = 0;
-
-$query = "
-    SELECT COUNT(*) AS total
-    FROM projects
-    WHERE manager_id = ?
-    AND status = 'on_hold'
-";
-
-$stmt = mysqli_prepare($conn, $query);
-
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $manager_id
-);
-
-mysqli_stmt_execute($stmt);
-
-$result = mysqli_stmt_get_result($stmt);
-
-if ($row = mysqli_fetch_assoc($result)) {
-
-    $on_hold = $row["total"];
-
-}
-
-mysqli_stmt_close($stmt);
-
-
-/*
-|--------------------------------------------------------------------------
-| Task Statistics
+| TOTAL TASKS
 |--------------------------------------------------------------------------
 */
 
 $total_tasks = 0;
-$completed_tasks = 0;
+
+$query = "
+    SELECT COUNT(*) AS total
+    FROM tasks t
+    INNER JOIN projects p
+        ON t.project_id = p.id
+    WHERE p.manager_id = $manager_id
+";
+
+$result = mysqli_query($conn, $query);
+
+if ($result) {
+    $row = mysqli_fetch_assoc($result);
+    $total_tasks = (int) $row["total"];
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| PENDING TASKS
+|--------------------------------------------------------------------------
+*/
+
 $pending_tasks = 0;
 
-
-/*
-| Total tasks
-*/
-
 $query = "
     SELECT COUNT(*) AS total
     FROM tasks t
-
     INNER JOIN projects p
         ON t.project_id = p.id
-
-    WHERE p.manager_id = ?
-";
-
-$stmt = mysqli_prepare($conn, $query);
-
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $manager_id
-);
-
-mysqli_stmt_execute($stmt);
-
-$result = mysqli_stmt_get_result($stmt);
-
-if ($row = mysqli_fetch_assoc($result)) {
-
-    $total_tasks = $row["total"];
-
-}
-
-mysqli_stmt_close($stmt);
-
-
-/*
-| Completed tasks
-*/
-
-$query = "
-    SELECT COUNT(*) AS total
-    FROM tasks t
-
-    INNER JOIN projects p
-        ON t.project_id = p.id
-
-    WHERE p.manager_id = ?
-    AND t.status = 'completed'
-";
-
-$stmt = mysqli_prepare($conn, $query);
-
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $manager_id
-);
-
-mysqli_stmt_execute($stmt);
-
-$result = mysqli_stmt_get_result($stmt);
-
-if ($row = mysqli_fetch_assoc($result)) {
-
-    $completed_tasks = $row["total"];
-
-}
-
-mysqli_stmt_close($stmt);
-
-
-/*
-| Pending tasks
-*/
-
-$query = "
-    SELECT COUNT(*) AS total
-    FROM tasks t
-
-    INNER JOIN projects p
-        ON t.project_id = p.id
-
-    WHERE p.manager_id = ?
+    WHERE p.manager_id = $manager_id
     AND t.status != 'completed'
 ";
 
-$stmt = mysqli_prepare($conn, $query);
+$result = mysqli_query($conn, $query);
 
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $manager_id
-);
-
-mysqli_stmt_execute($stmt);
-
-$result = mysqli_stmt_get_result($stmt);
-
-if ($row = mysqli_fetch_assoc($result)) {
-
-    $pending_tasks = $row["total"];
-
+if ($result) {
+    $row = mysqli_fetch_assoc($result);
+    $pending_tasks = (int) $row["total"];
 }
-
-mysqli_stmt_close($stmt);
 
 
 /*
 |--------------------------------------------------------------------------
-| Upcoming Deadlines
+| COMPLETED TASKS
 |--------------------------------------------------------------------------
 */
 
-$upcoming_projects = [];
+$completed_tasks = 0;
 
 $query = "
-    SELECT
-        p.id,
-        p.name,
-        p.end_date,
-        p.priority,
-        p.status
-
-    FROM projects p
-
-    WHERE p.manager_id = ?
-
-    AND p.end_date IS NOT NULL
-
-    AND p.end_date >= CURDATE()
-
-    AND p.status != 'completed'
-
-    ORDER BY p.end_date ASC
-
-    LIMIT 5
+    SELECT COUNT(*) AS total
+    FROM tasks t
+    INNER JOIN projects p
+        ON t.project_id = p.id
+    WHERE p.manager_id = $manager_id
+    AND t.status = 'completed'
 ";
 
-$stmt = mysqli_prepare($conn, $query);
+$result = mysqli_query($conn, $query);
 
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $manager_id
-);
-
-mysqli_stmt_execute($stmt);
-
-$result = mysqli_stmt_get_result($stmt);
-
-while ($row = mysqli_fetch_assoc($result)) {
-
-    $upcoming_projects[] = $row;
-
+if ($result) {
+    $row = mysqli_fetch_assoc($result);
+    $completed_tasks = (int) $row["total"];
 }
-
-mysqli_stmt_close($stmt);
 
 
 /*
 |--------------------------------------------------------------------------
-| Recent Projects
+| UPCOMING DEADLINES
 |--------------------------------------------------------------------------
 */
 
-$projects = [];
+$upcoming_deadlines = [];
 
 $query = "
     SELECT
-        p.id,
-        p.name,
-        p.description,
-        p.start_date,
-        p.end_date,
-        p.status,
-        p.priority
-
-    FROM projects p
-
-    WHERE p.manager_id = ?
-
-    ORDER BY p.created_at DESC
-
+        id,
+        name,
+        end_date,
+        priority,
+        status
+    FROM projects
+    WHERE manager_id = $manager_id
+    AND end_date IS NOT NULL
+    AND end_date >= CURDATE()
+    AND status != 'completed'
+    ORDER BY end_date ASC
     LIMIT 5
 ";
 
-$stmt = mysqli_prepare($conn, $query);
+$result = mysqli_query($conn, $query);
 
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $manager_id
-);
+if ($result) {
 
-mysqli_stmt_execute($stmt);
-
-$result = mysqli_stmt_get_result($stmt);
-
-while ($row = mysqli_fetch_assoc($result)) {
-
-    $projects[] = $row;
+    while ($row = mysqli_fetch_assoc($result)) {
+        $upcoming_deadlines[] = $row;
+    }
 
 }
 
-mysqli_stmt_close($stmt);
+
+/*
+|--------------------------------------------------------------------------
+| RECENT PROJECTS
+|--------------------------------------------------------------------------
+*/
+
+$recent_projects = [];
+
+$query = "
+    SELECT
+        id,
+        name,
+        description,
+        start_date,
+        end_date,
+        priority,
+        status
+    FROM projects
+    WHERE manager_id = $manager_id
+    ORDER BY created_at DESC
+    LIMIT 5
+";
+
+$result = mysqli_query($conn, $query);
+
+if ($result) {
+
+    while ($row = mysqli_fetch_assoc($result)) {
+        $recent_projects[] = $row;
+    }
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| RECENT TASKS
+|--------------------------------------------------------------------------
+*/
+
+$recent_tasks = [];
+
+$query = "
+    SELECT
+        t.id,
+        t.title,
+        t.status,
+        t.priority,
+        t.due_date,
+        p.name AS project_name
+    FROM tasks t
+    INNER JOIN projects p
+        ON t.project_id = p.id
+    WHERE p.manager_id = $manager_id
+    ORDER BY t.created_at DESC
+    LIMIT 5
+";
+
+$result = mysqli_query($conn, $query);
+
+if ($result) {
+
+    while ($row = mysqli_fetch_assoc($result)) {
+        $recent_tasks[] = $row;
+    }
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| RECENT ACTIVITY
+|--------------------------------------------------------------------------
+*/
+
+$activities = [];
+
+$query = "
+    SELECT
+        a.action,
+        a.description,
+        a.created_at,
+        u.full_name
+    FROM activity_logs a
+    INNER JOIN users u
+        ON a.user_id = u.id
+    WHERE
+        a.project_id IN (
+            SELECT id
+            FROM projects
+            WHERE manager_id = $manager_id
+        )
+    ORDER BY a.created_at DESC
+    LIMIT 6
+";
+
+$result = mysqli_query($conn, $query);
+
+if ($result) {
+
+    while ($row = mysqli_fetch_assoc($result)) {
+        $activities[] = $row;
+    }
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| INITIALS
+|--------------------------------------------------------------------------
+*/
+
+$initials = strtoupper(
+    substr($manager_name, 0, 2)
+);
 
 ?>
 
@@ -431,6 +357,7 @@ mysqli_stmt_close($stmt);
 
 <body>
 
+
 <div class="admin-layout">
 
 
@@ -439,6 +366,7 @@ mysqli_stmt_close($stmt);
     ====================================================== -->
 
     <aside class="sidebar">
+
 
         <div class="sidebar-logo">
 
@@ -462,6 +390,7 @@ mysqli_stmt_close($stmt);
 
 
         <nav class="sidebar-nav">
+
 
             <p class="nav-title">
                 MAIN
@@ -516,7 +445,7 @@ mysqli_stmt_close($stmt);
 
 
             <a
-                href="manager-team.php"
+                href="team.php"
                 class="nav-item"
             >
 
@@ -524,13 +453,13 @@ mysqli_stmt_close($stmt);
                     ♙
                 </span>
 
-                My Team
+                Team
 
             </a>
 
 
             <a
-                href="manager-reports.php"
+                href="reports.php"
                 class="nav-item"
             >
 
@@ -544,7 +473,7 @@ mysqli_stmt_close($stmt);
 
 
             <p class="nav-title">
-                ACCOUNT
+                SYSTEM
             </p>
 
 
@@ -560,6 +489,7 @@ mysqli_stmt_close($stmt);
                 My Profile
 
             </a>
+
 
         </nav>
 
@@ -581,11 +511,13 @@ mysqli_stmt_close($stmt);
 
         </div>
 
+
     </aside>
 
 
+
     <!-- =====================================================
-         MAIN
+         MAIN CONTENT
     ====================================================== -->
 
     <main class="main-content">
@@ -595,7 +527,9 @@ mysqli_stmt_close($stmt);
 
         <header class="topbar">
 
+
             <div class="topbar-left">
+
 
                 <button
                     class="mobile-menu"
@@ -618,10 +552,12 @@ mysqli_stmt_close($stmt);
 
                 </div>
 
+
             </div>
 
 
             <div class="topbar-right">
+
 
                 <button
                     class="notification-button"
@@ -633,17 +569,10 @@ mysqli_stmt_close($stmt);
 
                 <div class="admin-profile">
 
+
                     <div class="profile-avatar">
 
-                        <?= htmlspecialchars(
-                            strtoupper(
-                                substr(
-                                    $manager_name,
-                                    0,
-                                    2
-                                )
-                            )
-                        ) ?>
+                        <?= htmlspecialchars($initials) ?>
 
                     </div>
 
@@ -652,9 +581,7 @@ mysqli_stmt_close($stmt);
 
                         <strong>
 
-                            <?= htmlspecialchars(
-                                $manager_name
-                            ) ?>
+                            <?= htmlspecialchars($manager_name) ?>
 
                         </strong>
 
@@ -669,15 +596,19 @@ mysqli_stmt_close($stmt);
                         ▾
                     </span>
 
+
                 </div>
 
+
             </div>
+
 
         </header>
 
 
+
         <!-- =====================================================
-             CONTENT
+             DASHBOARD
         ====================================================== -->
 
         <section class="dashboard-content">
@@ -687,21 +618,24 @@ mysqli_stmt_close($stmt);
 
             <div class="page-header">
 
+
                 <div>
 
                     <span class="page-label">
                         PROJECT MANAGEMENT
                     </span>
 
+
                     <h1>
+
                         Welcome back,
-                        <?= htmlspecialchars(
-                            $manager_name
-                        ) ?>!
+                        <?= htmlspecialchars($manager_name) ?>!
+
                     </h1>
 
+
                     <p>
-                        Here's what's happening with your projects.
+                        Here's an overview of the projects you manage.
                     </p>
 
                 </div>
@@ -718,11 +652,13 @@ mysqli_stmt_close($stmt);
 
                 </div>
 
+
             </div>
 
 
+
             <!-- =================================================
-                 STATISTICS
+                 STAT CARDS
             ================================================== -->
 
             <div class="stats-grid">
@@ -739,7 +675,7 @@ mysqli_stmt_close($stmt);
                     <div class="stat-info">
 
                         <span>
-                            Total Projects
+                            My Projects
                         </span>
 
                         <strong>
@@ -751,22 +687,22 @@ mysqli_stmt_close($stmt);
                 </div>
 
 
-                <!-- IN PROGRESS -->
+                <!-- ACTIVE PROJECTS -->
 
                 <div class="stat-card">
 
                     <div class="stat-icon">
-                        ◷
+                        ◉
                     </div>
 
                     <div class="stat-info">
 
                         <span>
-                            In Progress
+                            Active Projects
                         </span>
 
                         <strong>
-                            <?= $in_progress ?>
+                            <?= $active_projects ?>
                         </strong>
 
                     </div>
@@ -774,7 +710,7 @@ mysqli_stmt_close($stmt);
                 </div>
 
 
-                <!-- COMPLETED -->
+                <!-- PENDING TASKS -->
 
                 <div class="stat-card">
 
@@ -785,11 +721,11 @@ mysqli_stmt_close($stmt);
                     <div class="stat-info">
 
                         <span>
-                            Completed
+                            Pending Tasks
                         </span>
 
                         <strong>
-                            <?= $completed_projects ?>
+                            <?= $pending_tasks ?>
                         </strong>
 
                     </div>
@@ -797,39 +733,115 @@ mysqli_stmt_close($stmt);
                 </div>
 
 
-                <!-- ON HOLD -->
+                <!-- COMPLETED TASKS -->
 
                 <div class="stat-card">
 
                     <div class="stat-icon">
-                        !
+                        ★
                     </div>
 
                     <div class="stat-info">
 
                         <span>
-                            On Hold
+                            Completed Tasks
                         </span>
 
                         <strong>
-                            <?= $on_hold ?>
+                            <?= $completed_tasks ?>
                         </strong>
 
                     </div>
 
                 </div>
 
+
             </div>
 
 
+
             <!-- =================================================
-                 TASK STATISTICS
+                 PROJECT + TASK OVERVIEW
             ================================================== -->
 
             <div class="dashboard-grid">
 
 
+                <!-- PROJECT OVERVIEW -->
+
                 <div class="dashboard-card">
+
+
+                    <div class="card-header">
+
+                        <div>
+
+                            <h2>
+                                Project Overview
+                            </h2>
+
+                            <p>
+                                Current status of your projects
+                            </p>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="task-overview">
+
+
+                        <div class="task-stat">
+
+                            <span>
+                                Total
+                            </span>
+
+                            <strong>
+                                <?= $total_projects ?>
+                            </strong>
+
+                        </div>
+
+
+                        <div class="task-stat">
+
+                            <span>
+                                Active
+                            </span>
+
+                            <strong>
+                                <?= $active_projects ?>
+                            </strong>
+
+                        </div>
+
+
+                        <div class="task-stat">
+
+                            <span>
+                                Completed
+                            </span>
+
+                            <strong>
+                                <?= $completed_projects ?>
+                            </strong>
+
+                        </div>
+
+
+                    </div>
+
+
+                </div>
+
+
+
+                <!-- TASK OVERVIEW -->
+
+                <div class="dashboard-card">
+
 
                     <div class="card-header">
 
@@ -854,11 +866,24 @@ mysqli_stmt_close($stmt);
                         <div class="task-stat">
 
                             <span>
-                                Total Tasks
+                                Total
                             </span>
 
                             <strong>
                                 <?= $total_tasks ?>
+                            </strong>
+
+                        </div>
+
+
+                        <div class="task-stat">
+
+                            <span>
+                                Pending
+                            </span>
+
+                            <strong>
+                                <?= $pending_tasks ?>
                             </strong>
 
                         </div>
@@ -877,142 +902,34 @@ mysqli_stmt_close($stmt);
                         </div>
 
 
-                        <div class="task-stat">
-
-                            <span>
-                                Pending
-                            </span>
-
-                            <strong>
-                                <?= $pending_tasks ?>
-                            </strong>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-
-                <!-- UPCOMING DEADLINES -->
-
-                <div class="dashboard-card">
-
-                    <div class="card-header">
-
-                        <div>
-
-                            <h2>
-                                Upcoming Deadlines
-                            </h2>
-
-                            <p>
-                                Projects approaching their deadlines
-                            </p>
-
-                        </div>
-
                     </div>
 
 
-                    <?php if (
-                        count($upcoming_projects) > 0
-                    ): ?>
-
-
-                        <div class="deadline-list">
-
-
-                            <?php foreach (
-                                $upcoming_projects
-                                as $project
-                            ): ?>
-
-                                <div class="deadline-item">
-
-                                    <div>
-
-                                        <strong>
-
-                                            <?= htmlspecialchars(
-                                                $project["name"]
-                                            ) ?>
-
-                                        </strong>
-
-                                        <span>
-
-                                            <?= htmlspecialchars(
-                                                $project["end_date"]
-                                            ) ?>
-
-                                        </span>
-
-                                    </div>
-
-
-                                    <span
-                                        class="priority-badge priority-<?= htmlspecialchars(
-                                            $project["priority"]
-                                        ) ?>"
-                                    >
-
-                                        <?= ucfirst(
-                                            htmlspecialchars(
-                                                $project["priority"]
-                                            )
-                                        ) ?>
-
-                                    </span>
-
-                                </div>
-
-                            <?php endforeach; ?>
-
-
-                        </div>
-
-
-                    <?php else: ?>
-
-
-                        <div class="empty-state small">
-
-                            <div class="empty-icon">
-                                ✓
-                            </div>
-
-                            <p>
-                                No upcoming deadlines.
-                            </p>
-
-                        </div>
-
-
-                    <?php endif; ?>
-
-
                 </div>
+
 
             </div>
 
 
+
             <!-- =================================================
-                 MY PROJECTS
+                 RECENT PROJECTS
             ================================================== -->
 
             <div class="dashboard-card">
 
+
                 <div class="card-header">
+
 
                     <div>
 
                         <h2>
-                            My Projects
+                            My Recent Projects
                         </h2>
 
                         <p>
-                            Projects assigned to you as manager
+                            Recently created projects assigned to you
                         </p>
 
                     </div>
@@ -1025,17 +942,18 @@ mysqli_stmt_close($stmt);
                         View All
                     </a>
 
+
                 </div>
 
 
-                <?php if (
-                    count($projects) > 0
-                ): ?>
+                <?php if (count($recent_projects) > 0): ?>
 
 
                     <div class="table-container">
 
+
                         <table class="projects-table">
+
 
                             <thead>
 
@@ -1070,7 +988,7 @@ mysqli_stmt_close($stmt);
 
 
                                 <?php foreach (
-                                    $projects
+                                    $recent_projects
                                     as $project
                                 ): ?>
 
@@ -1081,6 +999,7 @@ mysqli_stmt_close($stmt);
                                         <td>
 
                                             <div class="project-name">
+
 
                                                 <div class="project-avatar">
 
@@ -1106,15 +1025,25 @@ mysqli_stmt_close($stmt);
                                                     </strong>
 
 
-                                                    <span>
+                                                    <?php if (
+                                                        !empty(
+                                                            $project["description"]
+                                                        )
+                                                    ): ?>
 
-                                                        <?= htmlspecialchars(
-                                                            $project["description"] ?? ""
-                                                        ) ?>
+                                                        <span>
 
-                                                    </span>
+                                                            <?= htmlspecialchars(
+                                                                $project["description"]
+                                                            ) ?>
+
+                                                        </span>
+
+                                                    <?php endif; ?>
+
 
                                                 </div>
+
 
                                             </div>
 
@@ -1192,7 +1121,9 @@ mysqli_stmt_close($stmt);
 
                             </tbody>
 
+
                         </table>
+
 
                     </div>
 
@@ -1211,8 +1142,362 @@ mysqli_stmt_close($stmt);
                         </h3>
 
                         <p>
-                            You currently have no projects assigned to you.
+                            You don't have any projects assigned to you yet.
                         </p>
+
+                    </div>
+
+
+                <?php endif; ?>
+
+
+            </div>
+
+
+
+            <!-- =================================================
+                 DEADLINES + RECENT TASKS
+            ================================================== -->
+
+            <div class="dashboard-grid">
+
+
+                <!-- UPCOMING DEADLINES -->
+
+                <div class="dashboard-card">
+
+
+                    <div class="card-header">
+
+
+                        <div>
+
+                            <h2>
+                                Upcoming Deadlines
+                            </h2>
+
+                            <p>
+                                Projects approaching their deadlines
+                            </p>
+
+                        </div>
+
+                    </div>
+
+
+                    <?php if (
+                        count($upcoming_deadlines) > 0
+                    ): ?>
+
+
+                        <div class="deadline-list">
+
+
+                            <?php foreach (
+                                $upcoming_deadlines
+                                as $deadline
+                            ): ?>
+
+
+                                <div class="deadline-item">
+
+
+                                    <div>
+
+                                        <strong>
+
+                                            <?= htmlspecialchars(
+                                                $deadline["name"]
+                                            ) ?>
+
+                                        </strong>
+
+
+                                        <span>
+
+                                            Due:
+                                            <?= htmlspecialchars(
+                                                $deadline["end_date"]
+                                            ) ?>
+
+                                        </span>
+
+                                    </div>
+
+
+                                    <span
+                                        class="priority-badge priority-<?= htmlspecialchars(
+                                            $deadline["priority"]
+                                        ) ?>"
+                                    >
+
+                                        <?= ucfirst(
+                                            htmlspecialchars(
+                                                $deadline["priority"]
+                                            )
+                                        ) ?>
+
+                                    </span>
+
+
+                                </div>
+
+
+                            <?php endforeach; ?>
+
+
+                        </div>
+
+
+                    <?php else: ?>
+
+
+                        <div class="empty-state small">
+
+                            <div class="empty-icon">
+                                ✓
+                            </div>
+
+                            <p>
+                                No upcoming deadlines.
+                            </p>
+
+                        </div>
+
+
+                    <?php endif; ?>
+
+
+                </div>
+
+
+
+                <!-- RECENT TASKS -->
+
+                <div class="dashboard-card">
+
+
+                    <div class="card-header">
+
+
+                        <div>
+
+                            <h2>
+                                Recent Tasks
+                            </h2>
+
+                            <p>
+                                Latest tasks in your projects
+                            </p>
+
+                        </div>
+
+
+                        <a
+                            href="manager-tasks.php"
+                            class="text-button"
+                        >
+                            View All
+                        </a>
+
+
+                    </div>
+
+
+                    <?php if (count($recent_tasks) > 0): ?>
+
+
+                        <div class="deadline-list">
+
+
+                            <?php foreach (
+                                $recent_tasks
+                                as $task
+                            ): ?>
+
+
+                                <div class="deadline-item">
+
+
+                                    <div>
+
+                                        <strong>
+
+                                            <?= htmlspecialchars(
+                                                $task["title"]
+                                            ) ?>
+
+                                        </strong>
+
+
+                                        <span>
+
+                                            <?= htmlspecialchars(
+                                                $task["project_name"]
+                                            ) ?>
+
+                                        </span>
+
+                                    </div>
+
+
+                                    <span
+                                        class="status-badge status-<?= htmlspecialchars(
+                                            $task["status"]
+                                        ) ?>"
+                                    >
+
+                                        <?= ucfirst(
+                                            str_replace(
+                                                "_",
+                                                " ",
+                                                htmlspecialchars(
+                                                    $task["status"]
+                                                )
+                                            )
+                                        ) ?>
+
+                                    </span>
+
+
+                                </div>
+
+
+                            <?php endforeach; ?>
+
+
+                        </div>
+
+
+                    <?php else: ?>
+
+
+                        <div class="empty-state small">
+
+                            <div class="empty-icon">
+                                ✓
+                            </div>
+
+                            <p>
+                                No tasks yet.
+                            </p>
+
+                        </div>
+
+
+                    <?php endif; ?>
+
+
+                </div>
+
+
+            </div>
+
+
+
+            <!-- =================================================
+                 RECENT ACTIVITY
+            ================================================== -->
+
+            <div class="dashboard-card">
+
+
+                <div class="card-header">
+
+
+                    <div>
+
+                        <h2>
+                            Recent Activity
+                        </h2>
+
+                        <p>
+                            Latest activity in your projects
+                        </p>
+
+                    </div>
+
+
+                </div>
+
+
+                <?php if (count($activities) > 0): ?>
+
+
+                    <div class="activity-list">
+
+
+                        <?php foreach (
+                            $activities
+                            as $activity
+                        ): ?>
+
+
+                            <div class="activity-item">
+
+
+                                <div class="activity-icon">
+                                    •
+                                </div>
+
+
+                                <div>
+
+
+                                    <strong>
+
+                                        <?= htmlspecialchars(
+                                            $activity["full_name"]
+                                        ) ?>
+
+                                    </strong>
+
+
+                                    <p>
+
+                                        <?= htmlspecialchars(
+                                            $activity["description"]
+                                        ) ?>
+
+                                    </p>
+
+
+                                    <small>
+
+                                        <?= htmlspecialchars(
+                                            $activity["created_at"]
+                                        ) ?>
+
+                                    </small>
+
+
+                                </div>
+
+
+                            </div>
+
+
+                        <?php endforeach; ?>
+
+
+                    </div>
+
+
+                <?php else: ?>
+
+
+                    <div class="empty-state small">
+
+
+                        <div class="empty-icon">
+                            •
+                        </div>
+
+
+                        <p>
+                            No recent activity.
+                        </p>
+
 
                     </div>
 
@@ -1225,9 +1510,12 @@ mysqli_stmt_close($stmt);
 
         </section>
 
+
     </main>
 
+
 </div>
+
 
 </body>
 

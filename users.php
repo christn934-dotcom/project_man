@@ -85,6 +85,76 @@ foreach ($users as $user) {
 
     if ($user["status"] === "active") {
         $active_count++;
+        /*
+|--------------------------------------------------------------------------
+| ACTION MESSAGES
+|--------------------------------------------------------------------------
+*/
+
+$success_message = "";
+$error_message = "";
+
+if (isset($_GET["updated"])) {
+
+    if ($_GET["updated"] == "1") {
+        $success_message = "User updated successfully.";
+    }
+
+}
+
+if (isset($_GET["deleted"])) {
+
+    if ($_GET["deleted"] == "1") {
+        $success_message = "User deleted successfully.";
+    }
+
+}
+
+if (isset($_GET["status_changed"])) {
+
+    if ($_GET["status_changed"] == "1") {
+        $success_message = "User status changed successfully.";
+    }
+
+}
+
+if (isset($_GET["error"])) {
+
+    switch ($_GET["error"]) {
+
+        case "admin_protected":
+            $error_message =
+                "The administrator account is protected and cannot be modified or deleted.";
+            break;
+
+        case "user_not_found":
+            $error_message =
+                "The selected user could not be found.";
+            break;
+
+        case "invalid_user":
+            $error_message =
+                "Invalid user selected.";
+            break;
+
+        case "status_change_failed":
+            $error_message =
+                "Unable to change the user's status.";
+            break;
+
+        case "delete_failed":
+            $error_message =
+                "Unable to delete the user.";
+            break;
+
+        default:
+            $error_message =
+                "An unexpected error occurred.";
+            break;
+
+    }
+
+}
     }
 
 }
@@ -288,6 +358,50 @@ foreach ($users as $user) {
             font-size: 40px;
             margin-bottom: 15px;
         }
+        /* =====================================================
+   ALERT MESSAGES
+===================================================== */
+
+.alert-message {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    padding: 14px 18px;
+
+    border-radius: 10px;
+
+    margin-bottom: 20px;
+
+    font-size: 14px;
+
+    font-weight: 500;
+}
+
+.success-alert {
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    color: #047857;
+}
+
+.error-alert {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+}
+
+.alert-icon {
+    width: 25px;
+    height: 25px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 50%;
+
+    font-weight: 700;
+}
 
     </style>
 
@@ -594,7 +708,38 @@ foreach ($users as $user) {
 
         <section class="dashboard-content">
 
+<?php if ($success_message !== ""): ?>
 
+    <div class="alert-message success-alert">
+
+        <span class="alert-icon">
+            ✓
+        </span>
+
+        <span>
+            <?= htmlspecialchars($success_message) ?>
+        </span>
+
+    </div>
+
+<?php endif; ?>
+
+
+<?php if ($error_message !== ""): ?>
+
+    <div class="alert-message error-alert">
+
+        <span class="alert-icon">
+            !
+        </span>
+
+        <span>
+            <?= htmlspecialchars($error_message) ?>
+        </span>
+
+    </div>
+
+<?php endif; ?>
             <!-- PAGE HEADER -->
 
             <div class="page-header">
