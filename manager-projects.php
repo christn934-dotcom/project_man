@@ -4,37 +4,75 @@ session_start();
 
 require_once "config/database.php";
 
+
 /*
 |--------------------------------------------------------------------------
-| Check Login
+| CHECK LOGIN
 |--------------------------------------------------------------------------
 */
 
 if (!isset($_SESSION["user_id"])) {
+
     header("Location: login.php");
     exit;
+
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| Check Role
+| CHECK ROLE
 |--------------------------------------------------------------------------
 */
 
-if ($_SESSION["role"] !== "project_manager") {
-    header("Location: dashboard.php");
+if (!isset($_SESSION["role"])) {
+
+    header("Location: login.php");
     exit;
+
 }
 
+if ($_SESSION["role"] !== "project_manager") {
 
-$manager_id = $_SESSION["user_id"];
+    if ($_SESSION["role"] === "admin") {
+
+        header("Location: admin-dashboard.php");
+        exit;
+
+    }
+
+    if ($_SESSION["role"] === "member") {
+
+        header("Location: member-dashboard.php");
+        exit;
+
+    }
+
+    header("Location: login.php");
+    exit;
+
+}
 
 
 /*
 |--------------------------------------------------------------------------
-| Get Manager's Projects
+| MANAGER INFORMATION
 |--------------------------------------------------------------------------
+*/
+
+$manager_id = (int) $_SESSION["user_id"];
+
+$manager_name = $_SESSION["full_name"] ?? "Project Manager";
+
+
+/*
+|--------------------------------------------------------------------------
+| GET MANAGER'S PROJECTS
+|--------------------------------------------------------------------------
+|
+| A project manager can only see projects where they are
+| assigned as the project's manager.
+|
 */
 
 $projects = [];
@@ -60,34 +98,57 @@ $query = "
 
 $stmt = mysqli_prepare($conn, $query);
 
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $manager_id
-);
 
-mysqli_stmt_execute($stmt);
+if ($stmt) {
 
-$result = mysqli_stmt_get_result($stmt);
+    mysqli_stmt_bind_param(
+        $stmt,
+        "i",
+        $manager_id
+    );
+
+    mysqli_stmt_execute($stmt);
+
+    $result = mysqli_stmt_get_result($stmt);
 
 
-while ($row = mysqli_fetch_assoc($result)) {
+    if ($result) {
 
-    $projects[] = $row;
+        while ($row = mysqli_fetch_assoc($result)) {
+
+            $projects[] = $row;
+
+        }
+
+    }
+
+    mysqli_stmt_close($stmt);
 
 }
 
 
-mysqli_stmt_close($stmt);
-
-
 /*
 |--------------------------------------------------------------------------
-| Count Projects
+| COUNT PROJECTS
 |--------------------------------------------------------------------------
 */
 
 $total_projects = count($projects);
+
+
+/*
+|--------------------------------------------------------------------------
+| MANAGER INITIALS
+|--------------------------------------------------------------------------
+*/
+
+$manager_initials = strtoupper(
+    substr(
+        $manager_name,
+        0,
+        2
+    )
+);
 
 ?>
 
@@ -118,6 +179,7 @@ $total_projects = count($projects);
 
 <body>
 
+
 <div class="admin-layout">
 
 
@@ -126,6 +188,9 @@ $total_projects = count($projects);
     ====================================================== -->
 
     <aside class="sidebar">
+
+
+        <!-- LOGO -->
 
         <div class="sidebar-logo">
 
@@ -148,6 +213,8 @@ $total_projects = count($projects);
         </div>
 
 
+        <!-- NAVIGATION -->
+
         <nav class="sidebar-nav">
 
 
@@ -155,6 +222,8 @@ $total_projects = count($projects);
                 MAIN
             </p>
 
+
+            <!-- DASHBOARD -->
 
             <a
                 href="manager-dashboard.php"
@@ -170,6 +239,8 @@ $total_projects = count($projects);
             </a>
 
 
+            <!-- PROJECTS -->
+
             <a
                 href="manager-projects.php"
                 class="nav-item active"
@@ -183,6 +254,8 @@ $total_projects = count($projects);
 
             </a>
 
+
+            <!-- TASKS -->
 
             <a
                 href="manager-tasks.php"
@@ -198,10 +271,14 @@ $total_projects = count($projects);
             </a>
 
 
+            <!-- WORKSPACE -->
+
             <p class="nav-title">
                 WORKSPACE
             </p>
 
+
+            <!-- TEAM -->
 
             <a
                 href="manager-team.php"
@@ -217,6 +294,8 @@ $total_projects = count($projects);
             </a>
 
 
+            <!-- REPORTS -->
+
             <a
                 href="manager-reports.php"
                 class="nav-item"
@@ -231,10 +310,14 @@ $total_projects = count($projects);
             </a>
 
 
+            <!-- ACCOUNT -->
+
             <p class="nav-title">
                 ACCOUNT
             </p>
 
+
+            <!-- PROFILE -->
 
             <a
                 href="profile.php"
@@ -249,8 +332,11 @@ $total_projects = count($projects);
 
             </a>
 
+
         </nav>
 
+
+        <!-- LOGOUT -->
 
         <div class="sidebar-bottom">
 
@@ -269,7 +355,9 @@ $total_projects = count($projects);
 
         </div>
 
+
     </aside>
+
 
 
     <!-- =====================================================
@@ -279,12 +367,17 @@ $total_projects = count($projects);
     <main class="main-content">
 
 
-        <!-- TOPBAR -->
+        <!-- =================================================
+             TOPBAR
+        ================================================== -->
 
         <header class="topbar">
 
 
             <div class="topbar-left">
+
+
+                <!-- MOBILE MENU -->
 
                 <button
                     class="mobile-menu"
@@ -293,6 +386,8 @@ $total_projects = count($projects);
                     ☰
                 </button>
 
+
+                <!-- SEARCH -->
 
                 <div class="search-box">
 
@@ -304,15 +399,21 @@ $total_projects = count($projects);
                         type="text"
                         id="projectSearch"
                         placeholder="Search projects..."
+                        autocomplete="off"
                     >
 
                 </div>
 
+
             </div>
 
 
+            <!-- TOPBAR RIGHT -->
+
             <div class="topbar-right">
 
+
+                <!-- NOTIFICATIONS -->
 
                 <button
                     class="notification-button"
@@ -322,19 +423,15 @@ $total_projects = count($projects);
                 </button>
 
 
+                <!-- PROFILE -->
+
                 <div class="admin-profile">
 
 
                     <div class="profile-avatar">
 
                         <?= htmlspecialchars(
-                            strtoupper(
-                                substr(
-                                    $_SESSION["full_name"],
-                                    0,
-                                    2
-                                )
-                            )
+                            $manager_initials
                         ) ?>
 
                     </div>
@@ -345,10 +442,11 @@ $total_projects = count($projects);
                         <strong>
 
                             <?= htmlspecialchars(
-                                $_SESSION["full_name"]
+                                $manager_name
                             ) ?>
 
                         </strong>
+
 
                         <span>
                             Project Manager
@@ -364,58 +462,72 @@ $total_projects = count($projects);
 
                 </div>
 
+
             </div>
+
 
         </header>
 
 
-        <!-- =====================================================
+
+        <!-- =================================================
              PAGE CONTENT
-        ====================================================== -->
+        ================================================== -->
 
         <section class="dashboard-content">
 
 
-            <!-- PAGE HEADER -->
+            <!-- =================================================
+                 PAGE HEADER
+            ================================================== -->
 
             <div class="page-header">
 
 
                 <div>
 
+
                     <span class="page-label">
                         PROJECTS
                     </span>
+
 
                     <h1>
                         My Projects
                     </h1>
 
+
                     <p>
                         Manage and monitor projects assigned to you.
                     </p>
+
 
                 </div>
 
 
                 <div class="page-actions">
 
+
                     <span class="project-count">
 
                         <?= $total_projects ?>
 
                         Project<?=
+
                             $total_projects != 1
                                 ? "s"
                                 : ""
+
                         ?>
 
                     </span>
+
 
                 </div>
 
 
             </div>
+
 
 
             <!-- =================================================
@@ -434,21 +546,24 @@ $total_projects = count($projects);
                     <?php foreach ($projects as $project): ?>
 
 
+                        <!-- PROJECT CARD -->
+
                         <div
                             class="manager-project-card"
-                            data-project="
-                                <?= htmlspecialchars(
-                                    strtolower(
-                                        $project["name"]
-                                    )
-                                ) ?>
-                        ">
+                            data-project="<?= htmlspecialchars(
+                                strtolower(
+                                    $project["name"]
+                                )
+                            ) ?>"
+                        >
 
 
                             <!-- CARD HEADER -->
 
                             <div class="manager-card-top">
 
+
+                                <!-- PROJECT ICON -->
 
                                 <div class="project-card-icon">
 
@@ -465,23 +580,27 @@ $total_projects = count($projects);
                                 </div>
 
 
+                                <!-- PROJECT MENU -->
+
                                 <div class="manager-card-menu">
+
 
                                     <button
                                         type="button"
-                                        onclick="
-                                            openProjectMenu(
-                                                <?= $project["id"] ?>
-                                            )
-                                        "
+                                        onclick="openProjectMenu(
+                                            <?= (int) $project["id"] ?>
+                                        )"
+                                        aria-label="Project options"
                                     >
                                         ⋮
                                     </button>
+
 
                                 </div>
 
 
                             </div>
+
 
 
                             <!-- PROJECT NAME -->
@@ -493,6 +612,7 @@ $total_projects = count($projects);
                                 ) ?>
 
                             </h2>
+
 
 
                             <!-- DESCRIPTION -->
@@ -507,19 +627,18 @@ $total_projects = count($projects);
                             </p>
 
 
+
                             <!-- STATUS + PRIORITY -->
 
                             <div class="project-card-badges">
 
 
+                                <!-- STATUS -->
+
                                 <span
-                                    class="
-                                        status-badge
-                                        status-<?=
-                                            htmlspecialchars(
-                                                $project["status"]
-                                            )
-                                    "
+                                    class="status-badge status-<?= htmlspecialchars(
+                                        $project["status"]
+                                    ) ?>"
                                 >
 
                                     <?= htmlspecialchars(
@@ -535,14 +654,12 @@ $total_projects = count($projects);
                                 </span>
 
 
+                                <!-- PRIORITY -->
+
                                 <span
-                                    class="
-                                        priority-badge
-                                        priority-<?=
-                                            htmlspecialchars(
-                                                $project["priority"]
-                                            )
-                                    "
+                                    class="priority-badge priority-<?= htmlspecialchars(
+                                        $project["priority"]
+                                    ) ?>"
                                 >
 
                                     <?= htmlspecialchars(
@@ -557,44 +674,62 @@ $total_projects = count($projects);
                             </div>
 
 
+
                             <!-- DATES -->
 
                             <div class="project-card-details">
 
 
+                                <!-- START DATE -->
+
                                 <div>
+
 
                                     <span>
                                         Start Date
                                     </span>
 
+
                                     <strong>
 
-                                        <?= date(
-                                            "M d, Y",
-                                            strtotime(
-                                                $project["start_date"]
+                                        <?= !empty(
+                                            $project["start_date"]
+                                        )
+                                            ? date(
+                                                "M d, Y",
+                                                strtotime(
+                                                    $project["start_date"]
+                                                )
                                             )
-                                        ) ?>
+                                            : "Not set"
+                                        ?>
 
                                     </strong>
+
 
                                 </div>
 
 
+
+                                <!-- DEADLINE -->
+
                                 <div>
+
 
                                     <span>
                                         Deadline
                                     </span>
 
+
                                     <strong>
+
 
                                         <?php if (
                                             !empty(
                                                 $project["end_date"]
                                             )
                                         ): ?>
+
 
                                             <?= date(
                                                 "M d, Y",
@@ -603,13 +738,18 @@ $total_projects = count($projects);
                                                 )
                                             ) ?>
 
+
                                         <?php else: ?>
+
 
                                             No deadline
 
+
                                         <?php endif; ?>
 
+
                                     </strong>
+
 
                                 </div>
 
@@ -617,14 +757,16 @@ $total_projects = count($projects);
                             </div>
 
 
+
                             <!-- VIEW PROJECT -->
 
                             <a
-                                href="manager-project-details.php?id=<?= $project["id"] ?>"
+                                href="manager-project-details.php?id=<?= (int) $project["id"] ?>"
                                 class="project-view-button"
                             >
 
                                 View Project
+
 
                                 <span>
                                     →
@@ -642,10 +784,43 @@ $total_projects = count($projects);
                 </div>
 
 
+                <!-- NO SEARCH RESULTS -->
+
+                <div
+                    id="noSearchResults"
+                    class="dashboard-card"
+                    style="display: none;"
+                >
+
+                    <div class="empty-state">
+
+
+                        <div class="empty-icon">
+                            ⌕
+                        </div>
+
+
+                        <h3>
+                            No Projects Found
+                        </h3>
+
+
+                        <p>
+                            No project matches your search.
+                        </p>
+
+
+                    </div>
+
+                </div>
+
+
             <?php else: ?>
 
 
-                <!-- EMPTY STATE -->
+                <!-- =================================================
+                     EMPTY STATE
+                ================================================== -->
 
                 <div class="dashboard-card">
 
@@ -680,16 +855,24 @@ $total_projects = count($projects);
 
         </section>
 
+
     </main>
+
 
 </div>
 
 
+
+<!-- =====================================================
+     JAVASCRIPT
+====================================================== -->
+
 <script>
+
 
 /*
 |--------------------------------------------------------------------------
-| Project Search
+| PROJECT SEARCH
 |--------------------------------------------------------------------------
 */
 
@@ -699,11 +882,25 @@ const searchInput =
     );
 
 
+const projectCards =
+    document.querySelectorAll(
+        ".manager-project-card"
+    );
+
+
+const noSearchResults =
+    document.getElementById(
+        "noSearchResults"
+    );
+
+
 if (searchInput) {
 
+
     searchInput.addEventListener(
-        "keyup",
+        "input",
         function () {
+
 
             const search =
                 this.value
@@ -711,14 +908,12 @@ if (searchInput) {
                     .trim();
 
 
-            const cards =
-                document.querySelectorAll(
-                    ".manager-project-card"
-                );
+            let visibleCards = 0;
 
 
-            cards.forEach(
+            projectCards.forEach(
                 function (card) {
+
 
                     const text =
                         card.textContent
@@ -729,18 +924,52 @@ if (searchInput) {
                         text.includes(search)
                     ) {
 
+
                         card.style.display =
                             "";
 
+
+                        visibleCards++;
+
+
                     } else {
+
 
                         card.style.display =
                             "none";
+
 
                     }
 
                 }
             );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | SHOW NO RESULTS MESSAGE
+            |--------------------------------------------------------------------------
+            */
+
+            if (noSearchResults) {
+
+
+                if (
+                    search !== "" &&
+                    visibleCards === 0
+                ) {
+
+                    noSearchResults.style.display =
+                        "block";
+
+                } else {
+
+                    noSearchResults.style.display =
+                        "none";
+
+                }
+
+            }
 
         }
     );
@@ -748,9 +977,10 @@ if (searchInput) {
 }
 
 
+
 /*
 |--------------------------------------------------------------------------
-| Project Menu
+| PROJECT MENU
 |--------------------------------------------------------------------------
 */
 
@@ -765,6 +995,7 @@ function openProjectMenu(id) {
 }
 
 </script>
+
 
 </body>
 

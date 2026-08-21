@@ -4,39 +4,49 @@ session_start();
 
 require_once "config/database.php";
 
+
 /*
 |--------------------------------------------------------------------------
-| PROJECT MANAGER PROTECTION
+| MEMBER PROTECTION
 |--------------------------------------------------------------------------
 */
 
 if (!isset($_SESSION["user_id"])) {
+
     header("Location: login.php");
     exit;
+
 }
 
 if (
     !isset($_SESSION["role"]) ||
-    $_SESSION["role"] !== "project_manager"
+    $_SESSION["role"] !== "member"
 ) {
+
     header("Location: dashboard.php");
     exit;
+
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| MANAGER INFORMATION
+| MEMBER INFORMATION
 |--------------------------------------------------------------------------
 */
 
-$manager_id = (int) $_SESSION["user_id"];
-$manager_name = $_SESSION["full_name"] ?? "Project Manager";
+$member_id = (int) $_SESSION["user_id"];
+
+$member_name = $_SESSION["full_name"] ?? "Team Member";
+
+$member_email = $_SESSION["email"] ?? "";
 
 
 /*
 |--------------------------------------------------------------------------
 | TOTAL PROJECTS
+|--------------------------------------------------------------------------
+| Projects where the logged-in member is a team member.
 |--------------------------------------------------------------------------
 */
 
@@ -44,15 +54,18 @@ $total_projects = 0;
 
 $query = "
     SELECT COUNT(*) AS total
-    FROM projects
-    WHERE manager_id = $manager_id
+    FROM project_members
+    WHERE user_id = $member_id
 ";
 
 $result = mysqli_query($conn, $query);
 
 if ($result) {
+
     $row = mysqli_fetch_assoc($result);
+
     $total_projects = (int) $row["total"];
+
 }
 
 
@@ -66,45 +79,31 @@ $active_projects = 0;
 
 $query = "
     SELECT COUNT(*) AS total
-    FROM projects
-    WHERE manager_id = $manager_id
-    AND status = 'in_progress'
+
+    FROM project_members pm
+
+    INNER JOIN projects p
+        ON pm.project_id = p.id
+
+    WHERE pm.user_id = $member_id
+
+    AND p.status = 'in_progress'
 ";
 
 $result = mysqli_query($conn, $query);
 
 if ($result) {
+
     $row = mysqli_fetch_assoc($result);
+
     $active_projects = (int) $row["total"];
+
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| COMPLETED PROJECTS
-|--------------------------------------------------------------------------
-*/
-
-$completed_projects = 0;
-
-$query = "
-    SELECT COUNT(*) AS total
-    FROM projects
-    WHERE manager_id = $manager_id
-    AND status = 'completed'
-";
-
-$result = mysqli_query($conn, $query);
-
-if ($result) {
-    $row = mysqli_fetch_assoc($result);
-    $completed_projects = (int) $row["total"];
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| TOTAL TASKS
+| TOTAL ASSIGNED TASKS
 |--------------------------------------------------------------------------
 */
 
@@ -112,17 +111,20 @@ $total_tasks = 0;
 
 $query = "
     SELECT COUNT(*) AS total
-    FROM tasks t
-    INNER JOIN projects p
-        ON t.project_id = p.id
-    WHERE p.manager_id = $manager_id
+
+    FROM tasks
+
+    WHERE assigned_to = $member_id
 ";
 
 $result = mysqli_query($conn, $query);
 
 if ($result) {
+
     $row = mysqli_fetch_assoc($result);
+
     $total_tasks = (int) $row["total"];
+
 }
 
 
@@ -136,18 +138,22 @@ $pending_tasks = 0;
 
 $query = "
     SELECT COUNT(*) AS total
-    FROM tasks t
-    INNER JOIN projects p
-        ON t.project_id = p.id
-    WHERE p.manager_id = $manager_id
-    AND t.status != 'completed'
+
+    FROM tasks
+
+    WHERE assigned_to = $member_id
+
+    AND status != 'completed'
 ";
 
 $result = mysqli_query($conn, $query);
 
 if ($result) {
+
     $row = mysqli_fetch_assoc($result);
+
     $pending_tasks = (int) $row["total"];
+
 }
 
 
@@ -161,42 +167,59 @@ $completed_tasks = 0;
 
 $query = "
     SELECT COUNT(*) AS total
+
+    FROM tasks
+
+    WHERE assigned_to = $member_id
+
+    AND status = 'completed'
+";
+
+$result = mysqli_query($conn, $query);
+
+if ($result) {
+
+    $row = mysqli_fetch_assoc($result);
+
+    $completed_tasks = (int) $row["total"];
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| UPCOMING TASK DEADLINES
+|--------------------------------------------------------------------------
+*/
+
+$upcoming_tasks = [];
+
+$query = "
+    SELECT
+
+        t.id,
+        t.title,
+        t.due_date,
+        t.priority,
+        t.status,
+
+        p.name AS project_name
+
     FROM tasks t
+
     INNER JOIN projects p
         ON t.project_id = p.id
-    WHERE p.manager_id = $manager_id
-    AND t.status = 'completed'
-";
 
-$result = mysqli_query($conn, $query);
+    WHERE t.assigned_to = $member_id
 
-if ($result) {
-    $row = mysqli_fetch_assoc($result);
-    $completed_tasks = (int) $row["total"];
-}
+    AND t.due_date IS NOT NULL
 
+    AND t.due_date >= CURDATE()
 
-/*
-|--------------------------------------------------------------------------
-| UPCOMING DEADLINES
-|--------------------------------------------------------------------------
-*/
+    AND t.status != 'completed'
 
-$upcoming_deadlines = [];
+    ORDER BY t.due_date ASC
 
-$query = "
-    SELECT
-        id,
-        name,
-        end_date,
-        priority,
-        status
-    FROM projects
-    WHERE manager_id = $manager_id
-    AND end_date IS NOT NULL
-    AND end_date >= CURDATE()
-    AND status != 'completed'
-    ORDER BY end_date ASC
     LIMIT 5
 ";
 
@@ -205,41 +228,9 @@ $result = mysqli_query($conn, $query);
 if ($result) {
 
     while ($row = mysqli_fetch_assoc($result)) {
-        $upcoming_deadlines[] = $row;
-    }
 
-}
+        $upcoming_tasks[] = $row;
 
-
-/*
-|--------------------------------------------------------------------------
-| RECENT PROJECTS
-|--------------------------------------------------------------------------
-*/
-
-$recent_projects = [];
-
-$query = "
-    SELECT
-        id,
-        name,
-        description,
-        start_date,
-        end_date,
-        priority,
-        status
-    FROM projects
-    WHERE manager_id = $manager_id
-    ORDER BY created_at DESC
-    LIMIT 5
-";
-
-$result = mysqli_query($conn, $query);
-
-if ($result) {
-
-    while ($row = mysqli_fetch_assoc($result)) {
-        $recent_projects[] = $row;
     }
 
 }
@@ -255,17 +246,73 @@ $recent_tasks = [];
 
 $query = "
     SELECT
+
         t.id,
         t.title,
         t.status,
         t.priority,
         t.due_date,
+
         p.name AS project_name
+
     FROM tasks t
+
     INNER JOIN projects p
         ON t.project_id = p.id
-    WHERE p.manager_id = $manager_id
+
+    WHERE t.assigned_to = $member_id
+
     ORDER BY t.created_at DESC
+
+    LIMIT 6
+";
+
+$result = mysqli_query($conn, $query);
+
+if ($result) {
+
+    while ($row = mysqli_fetch_assoc($result)) {
+
+        $recent_tasks[] = $row;
+
+    }
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| MY PROJECTS
+|--------------------------------------------------------------------------
+*/
+
+$my_projects = [];
+
+$query = "
+    SELECT
+
+        p.id,
+        p.name,
+        p.description,
+        p.start_date,
+        p.end_date,
+        p.priority,
+        p.status,
+
+        u.full_name AS manager_name
+
+    FROM project_members pm
+
+    INNER JOIN projects p
+        ON pm.project_id = p.id
+
+    INNER JOIN users u
+        ON p.manager_id = u.id
+
+    WHERE pm.user_id = $member_id
+
+    ORDER BY p.created_at DESC
+
     LIMIT 5
 ";
 
@@ -274,7 +321,9 @@ $result = mysqli_query($conn, $query);
 if ($result) {
 
     while ($row = mysqli_fetch_assoc($result)) {
-        $recent_tasks[] = $row;
+
+        $my_projects[] = $row;
+
     }
 
 }
@@ -290,20 +339,30 @@ $activities = [];
 
 $query = "
     SELECT
+
         a.action,
         a.description,
         a.created_at,
+
         u.full_name
+
     FROM activity_logs a
+
     INNER JOIN users u
         ON a.user_id = u.id
-    WHERE
-        a.project_id IN (
-            SELECT id
-            FROM projects
-            WHERE manager_id = $manager_id
-        )
+
+    WHERE a.project_id IN (
+
+        SELECT project_id
+
+        FROM project_members
+
+        WHERE user_id = $member_id
+
+    )
+
     ORDER BY a.created_at DESC
+
     LIMIT 6
 ";
 
@@ -312,7 +371,9 @@ $result = mysqli_query($conn, $query);
 if ($result) {
 
     while ($row = mysqli_fetch_assoc($result)) {
+
         $activities[] = $row;
+
     }
 
 }
@@ -325,7 +386,7 @@ if ($result) {
 */
 
 $initials = strtoupper(
-    substr($manager_name, 0, 2)
+    substr($member_name, 0, 2)
 );
 
 ?>
@@ -344,7 +405,7 @@ $initials = strtoupper(
     >
 
     <title>
-        Manager Dashboard | PMS
+        Member Dashboard | PMS
     </title>
 
     <link
@@ -398,7 +459,7 @@ $initials = strtoupper(
 
 
             <a
-                href="manager-dashboard.php"
+                href="member-dashboard.php"
                 class="nav-item active"
             >
 
@@ -412,7 +473,7 @@ $initials = strtoupper(
 
 
             <a
-                href="manager-projects.php"
+                href="member-projects.php"
                 class="nav-item"
             >
 
@@ -426,7 +487,7 @@ $initials = strtoupper(
 
 
             <a
-                href="manager-tasks.php"
+                href="member-tasks.php"
                 class="nav-item"
             >
 
@@ -434,13 +495,13 @@ $initials = strtoupper(
                     ✓
                 </span>
 
-                Tasks
+                My Tasks
 
             </a>
 
 
             <p class="nav-title">
-                MANAGEMENT
+                COLLABORATION
             </p>
 
 
@@ -459,15 +520,15 @@ $initials = strtoupper(
 
 
             <a
-                href="reports.php"
+                href="notifications.php"
                 class="nav-item"
             >
 
                 <span class="nav-icon">
-                    ▥
+                    ♧
                 </span>
 
-                Reports
+                Notifications
 
             </a>
 
@@ -581,12 +642,14 @@ $initials = strtoupper(
 
                         <strong>
 
-                            <?= htmlspecialchars($manager_name) ?>
+                            <?= htmlspecialchars(
+                                $member_name
+                            ) ?>
 
                         </strong>
 
                         <span>
-                            Project Manager
+                            Team Member
                         </span>
 
                     </div>
@@ -608,7 +671,7 @@ $initials = strtoupper(
 
 
         <!-- =====================================================
-             DASHBOARD
+             DASHBOARD CONTENT
         ====================================================== -->
 
         <section class="dashboard-content">
@@ -622,20 +685,22 @@ $initials = strtoupper(
                 <div>
 
                     <span class="page-label">
-                        PROJECT MANAGEMENT
+                        TEAM MEMBER
                     </span>
 
 
                     <h1>
 
                         Welcome back,
-                        <?= htmlspecialchars($manager_name) ?>!
+                        <?= htmlspecialchars(
+                            $member_name
+                        ) ?>!
 
                     </h1>
 
 
                     <p>
-                        Here's an overview of the projects you manage.
+                        Here's an overview of your projects and assigned tasks.
                     </p>
 
                 </div>
@@ -644,10 +709,10 @@ $initials = strtoupper(
                 <div class="page-actions">
 
                     <a
-                        href="manager-projects.php"
+                        href="member-tasks.php"
                         class="primary-button"
                     >
-                        View My Projects
+                        View My Tasks
                     </a>
 
                 </div>
@@ -664,7 +729,7 @@ $initials = strtoupper(
             <div class="stats-grid">
 
 
-                <!-- TOTAL PROJECTS -->
+                <!-- PROJECTS -->
 
                 <div class="stat-card">
 
@@ -672,11 +737,13 @@ $initials = strtoupper(
                         ▣
                     </div>
 
+
                     <div class="stat-info">
 
                         <span>
                             My Projects
                         </span>
+
 
                         <strong>
                             <?= $total_projects ?>
@@ -687,6 +754,7 @@ $initials = strtoupper(
                 </div>
 
 
+
                 <!-- ACTIVE PROJECTS -->
 
                 <div class="stat-card">
@@ -695,11 +763,13 @@ $initials = strtoupper(
                         ◉
                     </div>
 
+
                     <div class="stat-info">
 
                         <span>
                             Active Projects
                         </span>
+
 
                         <strong>
                             <?= $active_projects ?>
@@ -710,6 +780,7 @@ $initials = strtoupper(
                 </div>
 
 
+
                 <!-- PENDING TASKS -->
 
                 <div class="stat-card">
@@ -718,11 +789,13 @@ $initials = strtoupper(
                         ✓
                     </div>
 
+
                     <div class="stat-info">
 
                         <span>
                             Pending Tasks
                         </span>
+
 
                         <strong>
                             <?= $pending_tasks ?>
@@ -733,6 +806,7 @@ $initials = strtoupper(
                 </div>
 
 
+
                 <!-- COMPLETED TASKS -->
 
                 <div class="stat-card">
@@ -741,11 +815,13 @@ $initials = strtoupper(
                         ★
                     </div>
 
+
                     <div class="stat-info">
 
                         <span>
                             Completed Tasks
                         </span>
+
 
                         <strong>
                             <?= $completed_tasks ?>
@@ -761,10 +837,84 @@ $initials = strtoupper(
 
 
             <!-- =================================================
-                 PROJECT + TASK OVERVIEW
+                 TASK OVERVIEW
             ================================================== -->
 
             <div class="dashboard-grid">
+
+
+                <!-- TASK OVERVIEW -->
+
+                <div class="dashboard-card">
+
+
+                    <div class="card-header">
+
+                        <div>
+
+                            <h2>
+                                My Task Overview
+                            </h2>
+
+                            <p>
+                                Your current task progress
+                            </p>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="task-overview">
+
+
+                        <div class="task-stat">
+
+                            <span>
+                                Total
+                            </span>
+
+
+                            <strong>
+                                <?= $total_tasks ?>
+                            </strong>
+
+                        </div>
+
+
+                        <div class="task-stat">
+
+                            <span>
+                                Pending
+                            </span>
+
+
+                            <strong>
+                                <?= $pending_tasks ?>
+                            </strong>
+
+                        </div>
+
+
+                        <div class="task-stat">
+
+                            <span>
+                                Completed
+                            </span>
+
+
+                            <strong>
+                                <?= $completed_tasks ?>
+                            </strong>
+
+                        </div>
+
+
+                    </div>
+
+
+                </div>
+
 
 
                 <!-- PROJECT OVERVIEW -->
@@ -781,7 +931,7 @@ $initials = strtoupper(
                             </h2>
 
                             <p>
-                                Current status of your projects
+                                Projects you belong to
                             </p>
 
                         </div>
@@ -797,6 +947,7 @@ $initials = strtoupper(
                             <span>
                                 Total
                             </span>
+
 
                             <strong>
                                 <?= $total_projects ?>
@@ -811,92 +962,9 @@ $initials = strtoupper(
                                 Active
                             </span>
 
+
                             <strong>
                                 <?= $active_projects ?>
-                            </strong>
-
-                        </div>
-
-
-                        <div class="task-stat">
-
-                            <span>
-                                Completed
-                            </span>
-
-                            <strong>
-                                <?= $completed_projects ?>
-                            </strong>
-
-                        </div>
-
-
-                    </div>
-
-
-                </div>
-
-
-
-                <!-- TASK OVERVIEW -->
-
-                <div class="dashboard-card">
-
-
-                    <div class="card-header">
-
-                        <div>
-
-                            <h2>
-                                Task Overview
-                            </h2>
-
-                            <p>
-                                Tasks across your projects
-                            </p>
-
-                        </div>
-
-                    </div>
-
-
-                    <div class="task-overview">
-
-
-                        <div class="task-stat">
-
-                            <span>
-                                Total
-                            </span>
-
-                            <strong>
-                                <?= $total_tasks ?>
-                            </strong>
-
-                        </div>
-
-
-                        <div class="task-stat">
-
-                            <span>
-                                Pending
-                            </span>
-
-                            <strong>
-                                <?= $pending_tasks ?>
-                            </strong>
-
-                        </div>
-
-
-                        <div class="task-stat">
-
-                            <span>
-                                Completed
-                            </span>
-
-                            <strong>
-                                <?= $completed_tasks ?>
                             </strong>
 
                         </div>
@@ -913,7 +981,7 @@ $initials = strtoupper(
 
 
             <!-- =================================================
-                 RECENT PROJECTS
+                 MY PROJECTS
             ================================================== -->
 
             <div class="dashboard-card">
@@ -925,18 +993,19 @@ $initials = strtoupper(
                     <div>
 
                         <h2>
-                            My Recent Projects
+                            My Projects
                         </h2>
 
+
                         <p>
-                            Recently created projects assigned to you
+                            Projects you are currently part of
                         </p>
 
                     </div>
 
 
                     <a
-                        href="manager-projects.php"
+                        href="member-projects.php"
                         class="text-button"
                     >
                         View All
@@ -946,7 +1015,9 @@ $initials = strtoupper(
                 </div>
 
 
-                <?php if (count($recent_projects) > 0): ?>
+                <?php if (
+                    count($my_projects) > 0
+                ): ?>
 
 
                     <div class="table-container">
@@ -964,7 +1035,7 @@ $initials = strtoupper(
                                     </th>
 
                                     <th>
-                                        Start Date
+                                        Project Manager
                                     </th>
 
                                     <th>
@@ -988,7 +1059,7 @@ $initials = strtoupper(
 
 
                                 <?php foreach (
-                                    $recent_projects
+                                    $my_projects
                                     as $project
                                 ): ?>
 
@@ -997,6 +1068,7 @@ $initials = strtoupper(
 
 
                                         <td>
+
 
                                             <div class="project-name">
 
@@ -1025,27 +1097,11 @@ $initials = strtoupper(
                                                     </strong>
 
 
-                                                    <?php if (
-                                                        !empty(
-                                                            $project["description"]
-                                                        )
-                                                    ): ?>
-
-                                                        <span>
-
-                                                            <?= htmlspecialchars(
-                                                                $project["description"]
-                                                            ) ?>
-
-                                                        </span>
-
-                                                    <?php endif; ?>
-
-
                                                 </div>
 
 
                                             </div>
+
 
                                         </td>
 
@@ -1053,7 +1109,7 @@ $initials = strtoupper(
                                         <td>
 
                                             <?= htmlspecialchars(
-                                                $project["start_date"]
+                                                $project["manager_name"]
                                             ) ?>
 
                                         </td>
@@ -1133,17 +1189,21 @@ $initials = strtoupper(
 
                     <div class="empty-state">
 
+
                         <div class="empty-icon">
                             ▣
                         </div>
 
+
                         <h3>
-                            No projects assigned
+                            No projects yet
                         </h3>
 
+
                         <p>
-                            You don't have any projects assigned to you yet.
+                            You have not been added to any projects yet.
                         </p>
+
 
                     </div>
 
@@ -1156,13 +1216,13 @@ $initials = strtoupper(
 
 
             <!-- =================================================
-                 DEADLINES + RECENT TASKS
+                 UPCOMING TASKS + RECENT TASKS
             ================================================== -->
 
             <div class="dashboard-grid">
 
 
-                <!-- UPCOMING DEADLINES -->
+                <!-- UPCOMING TASK DEADLINES -->
 
                 <div class="dashboard-card">
 
@@ -1176,8 +1236,9 @@ $initials = strtoupper(
                                 Upcoming Deadlines
                             </h2>
 
+
                             <p>
-                                Projects approaching their deadlines
+                                Your upcoming task deadlines
                             </p>
 
                         </div>
@@ -1186,7 +1247,7 @@ $initials = strtoupper(
 
 
                     <?php if (
-                        count($upcoming_deadlines) > 0
+                        count($upcoming_tasks) > 0
                     ): ?>
 
 
@@ -1194,8 +1255,8 @@ $initials = strtoupper(
 
 
                             <?php foreach (
-                                $upcoming_deadlines
-                                as $deadline
+                                $upcoming_tasks
+                                as $task
                             ): ?>
 
 
@@ -1204,10 +1265,11 @@ $initials = strtoupper(
 
                                     <div>
 
+
                                         <strong>
 
                                             <?= htmlspecialchars(
-                                                $deadline["name"]
+                                                $task["title"]
                                             ) ?>
 
                                         </strong>
@@ -1215,60 +1277,111 @@ $initials = strtoupper(
 
                                         <span>
 
+                                            <?= htmlspecialchars(
+                                                $task["project_name"]
+                                            ) ?>
+
+                                            —
+
                                             Due:
                                             <?= htmlspecialchars(
-                                                $deadline["end_date"]
+                                                $task["due_date"]
                                             ) ?>
 
                                         </span>
+
 
                                     </div>
 
 
                                     <span
                                         class="priority-badge priority-<?= htmlspecialchars(
-                                            $deadline["priority"]
+                                            $task["priority"]
                                         ) ?>"
                                     >
+
                                         <?= ucfirst(
                                             htmlspecialchars(
-                                                $deadline["priority"]
+                                                $task["priority"]
                                             )
                                         ) ?>
+
                                     </span>
+
+
                                 </div>
+
+
                             <?php endforeach; ?>
+
+
                         </div>
+
+
                     <?php else: ?>
+
+
                         <div class="empty-state small">
+
+
                             <div class="empty-icon">
                                 ✓
                             </div>
+
+
                             <p>
-                                No upcoming deadlines.
+                                No upcoming task deadlines.
                             </p>
+
+
                         </div>
+
+
                     <?php endif; ?>
+
+
                 </div>
+
+
+
                 <!-- RECENT TASKS -->
+
                 <div class="dashboard-card">
+
+
                     <div class="card-header">
+
+
                         <div>
+
                             <h2>
                                 Recent Tasks
                             </h2>
+
+
                             <p>
-                                Latest tasks in your projects
+                                Your recently assigned tasks
                             </p>
+
                         </div>
+
+
                         <a
-                            href="manager-tasks.php"
+                            href="member-tasks.php"
                             class="text-button"
                         >
                             View All
                         </a>
+
+
                     </div>
-                    <?php if (count($recent_tasks) > 0): ?>
+
+
+                    <?php if (
+                        count($recent_tasks) > 0
+                    ): ?>
+
+
                         <div class="deadline-list">
 
 
@@ -1282,6 +1395,7 @@ $initials = strtoupper(
 
 
                                     <div>
+
 
                                         <strong>
 
@@ -1299,6 +1413,7 @@ $initials = strtoupper(
                                             ) ?>
 
                                         </span>
+
 
                                     </div>
 
@@ -1336,13 +1451,16 @@ $initials = strtoupper(
 
                         <div class="empty-state small">
 
+
                             <div class="empty-icon">
                                 ✓
                             </div>
 
+
                             <p>
-                                No tasks yet.
+                                No tasks have been assigned to you yet.
                             </p>
+
 
                         </div>
 
@@ -1373,8 +1491,9 @@ $initials = strtoupper(
                             Recent Activity
                         </h2>
 
+
                         <p>
-                            Latest activity in your projects
+                            Recent activity from your projects
                         </p>
 
                     </div>
@@ -1383,7 +1502,9 @@ $initials = strtoupper(
                 </div>
 
 
-                <?php if (count($activities) > 0): ?>
+                <?php if (
+                    count($activities) > 0
+                ): ?>
 
 
                     <div class="activity-list">
