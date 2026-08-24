@@ -4,10 +4,9 @@ session_start();
 
 require_once "config/database.php";
 
-
 /*
 |--------------------------------------------------------------------------
-| Authentication
+| LOGIN CHECK
 |--------------------------------------------------------------------------
 */
 
@@ -16,25 +15,15 @@ if (!isset($_SESSION["user_id"])) {
     exit;
 }
 
-if ($_SESSION["role"] !== "project_manager") {
-    header("Location: dashboard.php");
-    exit;
-}
-
 
 /*
 |--------------------------------------------------------------------------
-| Get Project ID
+| ROLE CHECK
 |--------------------------------------------------------------------------
 */
 
-$project_id = isset($_GET["id"])
-    ? (int) $_GET["id"]
-    : 0;
-
-
-if ($project_id <= 0) {
-    header("Location: manager-projects.php");
+if (!isset($_SESSION["role"]) || $_SESSION["role"] !== "project_manager") {
+    header("Location: dashboard.php");
     exit;
 }
 
@@ -44,14 +33,26 @@ $manager_id = (int) $_SESSION["user_id"];
 
 /*
 |--------------------------------------------------------------------------
-| Get Project
+| GET PROJECT ID
 |--------------------------------------------------------------------------
-|
-| IMPORTANT:
-| manager_id = ? ensures that a manager can only
-| open projects assigned to themselves.
-|
 */
+
+$project_id = isset($_GET["id"]) ? (int) $_GET["id"] : 0;
+
+if ($project_id <= 0) {
+    header("Location: manager-projects.php");
+    exit;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| GET PROJECT
+| Only allow the logged-in manager to view their own project.
+|--------------------------------------------------------------------------
+*/
+
+$project = null;
 
 $query = "
     SELECT
@@ -63,43 +64,43 @@ $query = "
         p.status,
         p.priority,
         p.created_at,
-
+        p.updated_at,
         u.full_name AS manager_name,
         u.email AS manager_email
-
     FROM projects p
-
     INNER JOIN users u
         ON p.manager_id = u.id
-
     WHERE p.id = ?
     AND p.manager_id = ?
-
     LIMIT 1
 ";
 
-
 $stmt = mysqli_prepare($conn, $query);
 
-mysqli_stmt_bind_param(
-    $stmt,
-    "ii",
-    $project_id,
-    $manager_id
-);
+if ($stmt) {
 
-mysqli_stmt_execute($stmt);
+    mysqli_stmt_bind_param(
+        $stmt,
+        "ii",
+        $project_id,
+        $manager_id
+    );
 
-$result = mysqli_stmt_get_result($stmt);
+    mysqli_stmt_execute($stmt);
 
-$project = mysqli_fetch_assoc($result);
+    $result = mysqli_stmt_get_result($stmt);
 
-mysqli_stmt_close($stmt);
+    if ($result && mysqli_num_rows($result) === 1) {
+        $project = mysqli_fetch_assoc($result);
+    }
+
+    mysqli_stmt_close($stmt);
+}
 
 
 /*
 |--------------------------------------------------------------------------
-| Project not found
+| PROJECT NOT FOUND
 |--------------------------------------------------------------------------
 */
 
@@ -111,224 +112,157 @@ if (!$project) {
 
 /*
 |--------------------------------------------------------------------------
-| Get Team Members
+| GET TEAM MEMBERS
 |--------------------------------------------------------------------------
 */
 
 $members = [];
-
 
 $query = "
     SELECT
         u.id,
         u.full_name,
         u.email,
-        u.status
-
+        u.profile_image,
+        u.status,
+        pm.joined_at
     FROM project_members pm
-
     INNER JOIN users u
         ON pm.user_id = u.id
-
     WHERE pm.project_id = ?
-
     ORDER BY u.full_name ASC
 ";
 
-
 $stmt = mysqli_prepare($conn, $query);
 
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $project_id
-);
+if ($stmt) {
 
-mysqli_stmt_execute($stmt);
+    mysqli_stmt_bind_param(
+        $stmt,
+        "i",
+        $project_id
+    );
 
-$result = mysqli_stmt_get_result($stmt);
+    mysqli_stmt_execute($stmt);
 
+    $result = mysqli_stmt_get_result($stmt);
 
-while ($row = mysqli_fetch_assoc($result)) {
+    if ($result) {
 
-    $members[] = $row;
+        while ($row = mysqli_fetch_assoc($result)) {
+            $members[] = $row;
+        }
 
+    }
+
+    mysqli_stmt_close($stmt);
 }
-
-
-mysqli_stmt_close($stmt);
 
 
 /*
 |--------------------------------------------------------------------------
-| Task Statistics
+| GET TASK SUMMARY
 |--------------------------------------------------------------------------
 */
 
 $total_tasks = 0;
 $todo_tasks = 0;
-$progress_tasks = 0;
+$in_progress_tasks = 0;
 $review_tasks = 0;
 $completed_tasks = 0;
 
 
-/*
-| Total Tasks
-*/
+/* Total tasks */
 
-$stmt = mysqli_prepare(
-    $conn,
-    "
+$query = "
     SELECT COUNT(*) AS total
     FROM tasks
     WHERE project_id = ?
-    "
-);
+";
 
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $project_id
-);
+$stmt = mysqli_prepare($conn, $query);
 
-mysqli_stmt_execute($stmt);
+if ($stmt) {
 
-$result = mysqli_stmt_get_result($stmt);
+    mysqli_stmt_bind_param(
+        $stmt,
+        "i",
+        $project_id
+    );
 
-$row = mysqli_fetch_assoc($result);
+    mysqli_stmt_execute($stmt);
 
-$total_tasks = (int) ($row["total"] ?? 0);
+    $result = mysqli_stmt_get_result($stmt);
 
-mysqli_stmt_close($stmt);
+    if ($result) {
+
+        $row = mysqli_fetch_assoc($result);
+
+        $total_tasks = (int) $row["total"];
+
+    }
+
+    mysqli_stmt_close($stmt);
+}
 
 
-/*
-| To Do
-*/
+/* Task status counts */
 
-$stmt = mysqli_prepare(
-    $conn,
-    "
-    SELECT COUNT(*) AS total
+$query = "
+    SELECT
+        status,
+        COUNT(*) AS total
     FROM tasks
     WHERE project_id = ?
-    AND status = 'todo'
-    "
-);
+    GROUP BY status
+";
 
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $project_id
-);
+$stmt = mysqli_prepare($conn, $query);
 
-mysqli_stmt_execute($stmt);
+if ($stmt) {
 
-$result = mysqli_stmt_get_result($stmt);
+    mysqli_stmt_bind_param(
+        $stmt,
+        "i",
+        $project_id
+    );
 
-$row = mysqli_fetch_assoc($result);
+    mysqli_stmt_execute($stmt);
 
-$todo_tasks = (int) ($row["total"] ?? 0);
+    $result = mysqli_stmt_get_result($stmt);
 
-mysqli_stmt_close($stmt);
+    if ($result) {
 
+        while ($row = mysqli_fetch_assoc($result)) {
 
-/*
-| In Progress
-*/
+            switch ($row["status"]) {
 
-$stmt = mysqli_prepare(
-    $conn,
-    "
-    SELECT COUNT(*) AS total
-    FROM tasks
-    WHERE project_id = ?
-    AND status = 'in_progress'
-    "
-);
+                case "to_do":
+                    $todo_tasks = (int) $row["total"];
+                    break;
 
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $project_id
-);
+                case "in_progress":
+                    $in_progress_tasks = (int) $row["total"];
+                    break;
 
-mysqli_stmt_execute($stmt);
+                case "review":
+                    $review_tasks = (int) $row["total"];
+                    break;
 
-$result = mysqli_stmt_get_result($stmt);
+                case "completed":
+                    $completed_tasks = (int) $row["total"];
+                    break;
+            }
+        }
+    }
 
-$row = mysqli_fetch_assoc($result);
-
-$progress_tasks = (int) ($row["total"] ?? 0);
-
-mysqli_stmt_close($stmt);
-
-
-/*
-| Review
-*/
-
-$stmt = mysqli_prepare(
-    $conn,
-    "
-    SELECT COUNT(*) AS total
-    FROM tasks
-    WHERE project_id = ?
-    AND status = 'review'
-    "
-);
-
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $project_id
-);
-
-mysqli_stmt_execute($stmt);
-
-$result = mysqli_stmt_get_result($stmt);
-
-$row = mysqli_fetch_assoc($result);
-
-$review_tasks = (int) ($row["total"] ?? 0);
-
-mysqli_stmt_close($stmt);
-
-
-/*
-| Completed
-*/
-
-$stmt = mysqli_prepare(
-    $conn,
-    "
-    SELECT COUNT(*) AS total
-    FROM tasks
-    WHERE project_id = ?
-    AND status = 'completed'
-    "
-);
-
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $project_id
-);
-
-mysqli_stmt_execute($stmt);
-
-$result = mysqli_stmt_get_result($stmt);
-
-$row = mysqli_fetch_assoc($result);
-
-$completed_tasks = (int) ($row["total"] ?? 0);
-
-mysqli_stmt_close($stmt);
+    mysqli_stmt_close($stmt);
+}
 
 
 /*
 |--------------------------------------------------------------------------
-| Calculate Progress
+| PROJECT PROGRESS
 |--------------------------------------------------------------------------
 */
 
@@ -345,55 +279,30 @@ if ($total_tasks > 0) {
 
 /*
 |--------------------------------------------------------------------------
-| Get Tasks
+| FORMAT STATUS
 |--------------------------------------------------------------------------
 */
 
-$tasks = [];
-
-
-$query = "
-    SELECT
-        t.id,
-        t.title,
-        t.description,
-        t.status,
-        t.priority,
-        t.due_date,
-        u.full_name AS assigned_name
-
-    FROM tasks t
-
-    LEFT JOIN users u
-        ON t.assigned_to = u.id
-
-    WHERE t.project_id = ?
-
-    ORDER BY t.due_date ASC
-";
-
-
-$stmt = mysqli_prepare($conn, $query);
-
-mysqli_stmt_bind_param(
-    $stmt,
-    "i",
-    $project_id
+$project_status = ucfirst(
+    str_replace(
+        "_",
+        " ",
+        $project["status"]
+    )
 );
 
-mysqli_stmt_execute($stmt);
-
-$result = mysqli_stmt_get_result($stmt);
-
-
-while ($row = mysqli_fetch_assoc($result)) {
-
-    $tasks[] = $row;
-
-}
+$project_priority = ucfirst(
+    $project["priority"]
+);
 
 
-mysqli_stmt_close($stmt);
+/*
+|--------------------------------------------------------------------------
+| ADMIN NAME
+|--------------------------------------------------------------------------
+*/
+
+$manager_name = $_SESSION["full_name"] ?? "Project Manager";
 
 ?>
 
@@ -411,8 +320,7 @@ mysqli_stmt_close($stmt);
     >
 
     <title>
-        <?= htmlspecialchars($project["name"]) ?>
-        | PMS
+        <?= htmlspecialchars($project["name"]) ?> | PMS
     </title>
 
     <link
@@ -420,10 +328,228 @@ mysqli_stmt_close($stmt);
         href="assets/css/style.css"
     >
 
+    <style>
+
+        .project-details-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .project-details-title {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .project-details-avatar {
+            width: 58px;
+            height: 58px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            font-weight: 700;
+            background: #eef2ff;
+            color: #4f46e5;
+        }
+
+        .project-details-title h1 {
+            margin: 0 0 6px;
+        }
+
+        .project-details-title p {
+            margin: 0;
+        }
+
+        .project-details-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .secondary-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 16px;
+            border-radius: 8px;
+            text-decoration: none;
+            border: 1px solid #ddd;
+            background: #fff;
+            color: #333;
+            cursor: pointer;
+        }
+
+        .details-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .project-info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .info-item {
+            padding: 14px;
+            border-radius: 10px;
+            background: #f8f9fb;
+        }
+
+        .info-item span {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 5px;
+            color: #777;
+        }
+
+        .info-item strong {
+            display: block;
+            font-size: 15px;
+        }
+
+        .project-description {
+            line-height: 1.7;
+            color: #555;
+            margin-top: 15px;
+        }
+
+        .progress-section {
+            margin-top: 25px;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background: #e9ecef;
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #4f46e5;
+            border-radius: 20px;
+        }
+
+        .task-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        .task-summary-item {
+            padding: 15px;
+            border-radius: 10px;
+            background: #f8f9fb;
+        }
+
+        .task-summary-item span {
+            display: block;
+            color: #777;
+            font-size: 13px;
+            margin-bottom: 5px;
+        }
+
+        .task-summary-item strong {
+            font-size: 22px;
+        }
+
+        .member-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .member-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 10px;
+            background: #f8f9fb;
+        }
+
+        .member-avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: #e9edff;
+            color: #4f46e5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+
+        .member-details {
+            flex: 1;
+        }
+
+        .member-details strong {
+            display: block;
+        }
+
+        .member-details small {
+            color: #777;
+        }
+
+        .empty-small {
+            padding: 25px 10px;
+            text-align: center;
+            color: #777;
+        }
+
+        .status-priority-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        @media (max-width: 900px) {
+
+            .details-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .project-details-header {
+                flex-direction: column;
+            }
+
+        }
+
+        @media (max-width: 600px) {
+
+            .project-info-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .task-summary-grid {
+                grid-template-columns: 1fr;
+            }
+
+        }
+
+    </style>
+
 </head>
 
 
 <body>
+
 
 <div class="admin-layout">
 
@@ -433,6 +559,7 @@ mysqli_stmt_close($stmt);
     ====================================================== -->
 
     <aside class="sidebar">
+
 
         <div class="sidebar-logo">
 
@@ -456,6 +583,7 @@ mysqli_stmt_close($stmt);
 
 
         <nav class="sidebar-nav">
+
 
             <p class="nav-title">
                 MAIN
@@ -555,6 +683,7 @@ mysqli_stmt_close($stmt);
 
             </a>
 
+
         </nav>
 
 
@@ -575,11 +704,13 @@ mysqli_stmt_close($stmt);
 
         </div>
 
+
     </aside>
 
 
+
     <!-- =====================================================
-         MAIN
+         MAIN CONTENT
     ====================================================== -->
 
     <main class="main-content">
@@ -588,6 +719,7 @@ mysqli_stmt_close($stmt);
         <!-- TOPBAR -->
 
         <header class="topbar">
+
 
             <div class="topbar-left">
 
@@ -617,6 +749,7 @@ mysqli_stmt_close($stmt);
 
             <div class="topbar-right">
 
+
                 <button
                     class="notification-button"
                     type="button"
@@ -627,12 +760,13 @@ mysqli_stmt_close($stmt);
 
                 <div class="admin-profile">
 
+
                     <div class="profile-avatar">
 
                         <?= htmlspecialchars(
                             strtoupper(
                                 substr(
-                                    $_SESSION["full_name"],
+                                    $manager_name,
                                     0,
                                     2
                                 )
@@ -647,7 +781,7 @@ mysqli_stmt_close($stmt);
                         <strong>
 
                             <?= htmlspecialchars(
-                                $_SESSION["full_name"]
+                                $manager_name
                             ) ?>
 
                         </strong>
@@ -663,116 +797,135 @@ mysqli_stmt_close($stmt);
                         ▾
                     </span>
 
+
                 </div>
 
+
             </div>
+
 
         </header>
 
 
+
         <!-- =====================================================
-             CONTENT
+             PAGE
         ====================================================== -->
 
         <section class="dashboard-content">
 
 
-            <!-- BACK BUTTON -->
-
-            <a
-                href="manager-projects.php"
-                class="back-button"
-            >
-                ← Back to My Projects
-            </a>
-
-
-            <!-- PROJECT HEADER -->
+            <!-- PAGE HEADER -->
 
             <div class="project-details-header">
 
-                <div>
 
-                    <span class="page-label">
-                        PROJECT
-                    </span>
+                <div class="project-details-title">
 
-                    <h1>
+
+                    <div class="project-details-avatar">
 
                         <?= htmlspecialchars(
-                            $project["name"]
-                        ) ?>
-
-                    </h1>
-
-                    <p>
-
-                        <?= htmlspecialchars(
-                            $project["description"]
-                            ?: "No description provided."
-                        ) ?>
-
-                    </p>
-
-                </div>
-
-
-                <div class="project-header-status">
-
-                    <span
-                        class="
-                            status-badge
-                            status-<?=
-                                htmlspecialchars(
-                                    $project["status"]
-                                )
-                        "
-                    >
-
-                        <?= htmlspecialchars(
-                            ucfirst(
-                                str_replace(
-                                    "_",
-                                    " ",
-                                    $project["status"]
+                            strtoupper(
+                                substr(
+                                    $project["name"],
+                                    0,
+                                    1
                                 )
                             )
                         ) ?>
 
-                    </span>
+                    </div>
 
 
-                    <span
-                        class="
-                            priority-badge
-                            priority-<?=
-                                htmlspecialchars(
+                    <div>
+
+                        <span class="page-label">
+                            PROJECT
+                        </span>
+
+
+                        <h1>
+
+                            <?= htmlspecialchars(
+                                $project["name"]
+                            ) ?>
+
+                        </h1>
+
+
+                        <p>
+                            Project details and progress
+                        </p>
+
+
+                        <div class="status-priority-row">
+
+
+                            <span
+                                class="status-badge status-<?= htmlspecialchars(
+                                    $project["status"]
+                                ) ?>"
+                            >
+
+                                <?= htmlspecialchars(
+                                    $project_status
+                                ) ?>
+
+                            </span>
+
+
+                            <span
+                                class="priority-badge priority-<?= htmlspecialchars(
                                     $project["priority"]
-                                )
-                        "
-                    >
+                                ) ?>"
+                            >
 
-                        <?= htmlspecialchars(
-                            ucfirst(
-                                $project["priority"]
-                            )
-                        ) ?>
+                                <?= htmlspecialchars(
+                                    $project_priority
+                                ) ?>
 
-                    </span>
+                            </span>
+
+
+                        </div>
+
+
+                    </div>
+
 
                 </div>
+
+
+                <div class="project-details-actions">
+
+
+                    <a
+                        href="manager-projects.php"
+                        class="secondary-button"
+                    >
+                        ← Back to Projects
+                    </a>
+
+
+                </div>
+
 
             </div>
 
 
+
             <!-- =================================================
-                 PROJECT INFORMATION
+                 PROJECT INFORMATION + TASK SUMMARY
             ================================================== -->
 
-            <div class="project-info-grid">
+            <div class="details-grid">
 
+
+                <!-- PROJECT INFORMATION -->
 
                 <div class="dashboard-card">
+
 
                     <div class="card-header">
 
@@ -783,7 +936,7 @@ mysqli_stmt_close($stmt);
                             </h2>
 
                             <p>
-                                Basic project details
+                                Basic information about this project
                             </p>
 
                         </div>
@@ -791,10 +944,40 @@ mysqli_stmt_close($stmt);
                     </div>
 
 
-                    <div class="project-info-list">
+                    <div class="project-info-grid">
 
 
-                        <div>
+                        <div class="info-item">
+
+                            <span>
+                                Project Manager
+                            </span>
+
+                            <strong>
+                                <?= htmlspecialchars(
+                                    $project["manager_name"]
+                                ) ?>
+                            </strong>
+
+                        </div>
+
+
+                        <div class="info-item">
+
+                            <span>
+                                Manager Email
+                            </span>
+
+                            <strong>
+                                <?= htmlspecialchars(
+                                    $project["manager_email"]
+                                ) ?>
+                            </strong>
+
+                        </div>
+
+
+                        <div class="info-item">
 
                             <span>
                                 Start Date
@@ -814,7 +997,7 @@ mysqli_stmt_close($stmt);
                         </div>
 
 
-                        <div>
+                        <div class="info-item">
 
                             <span>
                                 Deadline
@@ -822,11 +1005,7 @@ mysqli_stmt_close($stmt);
 
                             <strong>
 
-                                <?php if (
-                                    !empty(
-                                        $project["end_date"]
-                                    )
-                                ): ?>
+                                <?php if (!empty($project["end_date"])): ?>
 
                                     <?= date(
                                         "M d, Y",
@@ -846,16 +1025,19 @@ mysqli_stmt_close($stmt);
                         </div>
 
 
-                        <div>
+                        <div class="info-item">
 
                             <span>
-                                Project Manager
+                                Created
                             </span>
 
                             <strong>
 
-                                <?= htmlspecialchars(
-                                    $project["manager_name"]
+                                <?= date(
+                                    "M d, Y",
+                                    strtotime(
+                                        $project["created_at"]
+                                    )
                                 ) ?>
 
                             </strong>
@@ -863,16 +1045,19 @@ mysqli_stmt_close($stmt);
                         </div>
 
 
-                        <div>
+                        <div class="info-item">
 
                             <span>
-                                Manager Email
+                                Last Updated
                             </span>
 
                             <strong>
 
-                                <?= htmlspecialchars(
-                                    $project["manager_email"]
+                                <?= date(
+                                    "M d, Y",
+                                    strtotime(
+                                        $project["updated_at"]
+                                    )
                                 ) ?>
 
                             </strong>
@@ -882,31 +1067,80 @@ mysqli_stmt_close($stmt);
 
                     </div>
 
+
+                    <div class="project-description">
+
+
+                        <strong>
+                            Description
+                        </strong>
+
+
+                        <p>
+
+                            <?= nl2br(
+                                htmlspecialchars(
+                                    $project["description"]
+                                    ?: "No description provided."
+                                )
+                            ) ?>
+
+                        </p>
+
+
+                    </div>
+
+
+                    <!-- PROGRESS -->
+
+                    <div class="progress-section">
+
+
+                        <div class="progress-header">
+
+                            <strong>
+                                Project Progress
+                            </strong>
+
+                            <strong>
+                                <?= $progress ?>%
+                            </strong>
+
+                        </div>
+
+
+                        <div class="progress-bar">
+
+                            <div
+                                class="progress-fill"
+                                style="width: <?= $progress ?>%;"
+                            ></div>
+
+                        </div>
+
+
+                    </div>
+
+
                 </div>
 
 
-                <!-- TEAM -->
+
+                <!-- TASK SUMMARY -->
 
                 <div class="dashboard-card">
+
 
                     <div class="card-header">
 
                         <div>
 
                             <h2>
-                                Team Members
+                                Task Summary
                             </h2>
 
                             <p>
-
-                                <?= count($members) ?>
-
-                                member<?=
-                                    count($members) != 1
-                                        ? "s"
-                                        : ""
-                                ?>
-
+                                Current project tasks
                             </p>
 
                         </div>
@@ -914,93 +1148,79 @@ mysqli_stmt_close($stmt);
                     </div>
 
 
-                    <?php if (!empty($members)): ?>
+                    <div class="task-summary-grid">
 
 
-                        <div class="team-member-list">
+                        <div class="task-summary-item">
 
+                            <span>
+                                To Do
+                            </span>
 
-                            <?php foreach (
-                                $members
-                                as $member
-                            ): ?>
-
-
-                                <div class="team-member-item">
-
-
-                                    <div class="member-avatar">
-
-                                        <?= htmlspecialchars(
-                                            strtoupper(
-                                                substr(
-                                                    $member["full_name"],
-                                                    0,
-                                                    1
-                                                )
-                                            )
-                                        ) ?>
-
-                                    </div>
-
-
-                                    <div class="member-info">
-
-                                        <strong>
-
-                                            <?= htmlspecialchars(
-                                                $member["full_name"]
-                                            ) ?>
-
-                                        </strong>
-
-                                        <span>
-
-                                            <?= htmlspecialchars(
-                                                $member["email"]
-                                            ) ?>
-
-                                        </span>
-
-                                    </div>
-
-
-                                    <span
-                                        class="
-                                            member-status
-                                            <?= $member["status"] === "active"
-                                                ? "active"
-                                                : "inactive"
-                                            ?>
-                                    ">
-
-                                        <?= ucfirst(
-                                            $member["status"]
-                                        ) ?>
-
-                                    </span>
-
-
-                                </div>
-
-
-                            <?php endforeach; ?>
-
+                            <strong>
+                                <?= $todo_tasks ?>
+                            </strong>
 
                         </div>
 
 
-                    <?php else: ?>
+                        <div class="task-summary-item">
 
+                            <span>
+                                In Progress
+                            </span>
 
-                        <div class="small-empty-state">
-
-                            No team members assigned.
+                            <strong>
+                                <?= $in_progress_tasks ?>
+                            </strong>
 
                         </div>
 
 
-                    <?php endif; ?>
+                        <div class="task-summary-item">
+
+                            <span>
+                                Review
+                            </span>
+
+                            <strong>
+                                <?= $review_tasks ?>
+                            </strong>
+
+                        </div>
+
+
+                        <div class="task-summary-item">
+
+                            <span>
+                                Completed
+                            </span>
+
+                            <strong>
+                                <?= $completed_tasks ?>
+                            </strong>
+
+                        </div>
+
+
+                    </div>
+
+
+                    <div class="progress-section">
+
+                        <div class="progress-header">
+
+                            <span>
+                                Total Tasks
+                            </span>
+
+                            <strong>
+                                <?= $total_tasks ?>
+                            </strong>
+
+                        </div>
+
+                    </div>
 
 
                 </div>
@@ -1009,8 +1229,9 @@ mysqli_stmt_close($stmt);
             </div>
 
 
+
             <!-- =================================================
-                 TASK PROGRESS
+                 TEAM MEMBERS
             ================================================== -->
 
             <div class="dashboard-card">
@@ -1018,319 +1239,98 @@ mysqli_stmt_close($stmt);
 
                 <div class="card-header">
 
+
                     <div>
 
                         <h2>
-                            Task Progress
+                            Team Members
                         </h2>
 
                         <p>
-                            Current project task progress
+                            Members assigned to this project
                         </p>
 
                     </div>
 
 
                     <strong>
-                        <?= $progress ?>%
+                        <?= count($members) ?>
+                        member<?= count($members) !== 1 ? "s" : "" ?>
                     </strong>
 
-                </div>
-
-
-                <div class="progress-container">
-
-                    <div
-                        class="progress-bar"
-                        style="
-                            width: <?= $progress ?>%;
-                        "
-                    ></div>
 
                 </div>
 
 
-                <div class="task-stat-row">
+                <?php if (!empty($members)): ?>
 
 
-                    <div>
+                    <div class="member-list">
 
-                        <span class="task-stat-number">
-                            <?= $total_tasks ?>
-                        </span>
 
-                        <span>
-                            Total
-                        </span>
+                        <?php foreach ($members as $member): ?>
 
-                    </div>
 
+                            <div class="member-item">
 
-                    <div>
 
-                        <span class="task-stat-number">
-                            <?= $todo_tasks ?>
-                        </span>
+                                <div class="member-avatar">
 
-                        <span>
-                            To Do
-                        </span>
-
-                    </div>
-
-
-                    <div>
-
-                        <span class="task-stat-number">
-                            <?= $progress_tasks ?>
-                        </span>
-
-                        <span>
-                            In Progress
-                        </span>
-
-                    </div>
-
-
-                    <div>
-
-                        <span class="task-stat-number">
-                            <?= $review_tasks ?>
-                        </span>
-
-                        <span>
-                            Review
-                        </span>
-
-                    </div>
-
-
-                    <div>
-
-                        <span class="task-stat-number">
-                            <?= $completed_tasks ?>
-                        </span>
-
-                        <span>
-                            Completed
-                        </span>
-
-                    </div>
-
-
-                </div>
-
-            </div>
-
-
-            <!-- =================================================
-                 TASKS
-            ================================================== -->
-
-            <div class="dashboard-card">
-
-
-                <div class="card-header">
-
-                    <div>
-
-                        <h2>
-                            Project Tasks
-                        </h2>
-
-                        <p>
-                            Tasks belonging to this project
-                        </p>
-
-                    </div>
-
-
-                    <a
-                        href="manager-tasks.php?project_id=<?= $project_id ?>"
-                        class="primary-button"
-                    >
-                        + Add Task
-                    </a>
-
-                </div>
-
-
-                <?php if (!empty($tasks)): ?>
-
-
-                    <div class="table-container">
-
-                        <table class="projects-table">
-
-                            <thead>
-
-                                <tr>
-
-                                    <th>
-                                        Task
-                                    </th>
-
-                                    <th>
-                                        Assigned To
-                                    </th>
-
-                                    <th>
-                                        Priority
-                                    </th>
-
-                                    <th>
-                                        Due Date
-                                    </th>
-
-                                    <th>
-                                        Status
-                                    </th>
-
-                                </tr>
-
-                            </thead>
-
-
-                            <tbody>
-
-
-                            <?php foreach (
-                                $tasks
-                                as $task
-                            ): ?>
-
-
-                                <tr>
-
-
-                                    <td>
-
-                                        <strong>
-
-                                            <?= htmlspecialchars(
-                                                $task["title"]
-                                            ) ?>
-
-                                        </strong>
-
-                                        <?php if (
-                                            !empty(
-                                                $task["description"]
+                                    <?= htmlspecialchars(
+                                        strtoupper(
+                                            substr(
+                                                $member["full_name"],
+                                                0,
+                                                2
                                             )
-                                        ): ?>
+                                        )
+                                    ) ?>
 
-                                            <small
-                                                style="
-                                                    display:block;
-                                                    color:#9ca3af;
-                                                    margin-top:4px;
-                                                "
-                                            >
-
-                                                <?= htmlspecialchars(
-                                                    $task["description"]
-                                                ) ?>
-
-                                            </small>
-
-                                        <?php endif; ?>
-
-                                    </td>
+                                </div>
 
 
-                                    <td>
+                                <div class="member-details">
+
+
+                                    <strong>
 
                                         <?= htmlspecialchars(
-                                            $task["assigned_name"]
-                                            ?? "Unassigned"
+                                            $member["full_name"]
                                         ) ?>
 
-                                    </td>
+                                    </strong>
 
 
-                                    <td>
+                                    <small>
 
-                                        <span
-                                            class="
-                                                priority-badge
-                                                priority-<?=
-                                                    htmlspecialchars(
-                                                        $task["priority"]
-                                                    )
-                                            "
-                                        >
+                                        <?= htmlspecialchars(
+                                            $member["email"]
+                                        ) ?>
 
-                                            <?= htmlspecialchars(
-                                                ucfirst(
-                                                    $task["priority"]
-                                                )
-                                            ) ?>
-
-                                        </span>
-
-                                    </td>
+                                    </small>
 
 
-                                    <td>
-
-                                        <?php if (
-                                            !empty(
-                                                $task["due_date"]
-                                            )
-                                        ): ?>
-
-                                            <?= date(
-                                                "M d, Y",
-                                                strtotime(
-                                                    $task["due_date"]
-                                                )
-                                            ) ?>
-
-                                        <?php else: ?>
-
-                                            —
-
-                                        <?php endif; ?>
-
-                                    </td>
+                                </div>
 
 
-                                    <td>
+                                <span
+                                    class="status-badge"
+                                >
 
-                                        <span
-                                            class="
-                                                status-badge
-                                                status-<?=
-                                                    htmlspecialchars(
-                                                        $task["status"]
-                                                    )
-                                            "
-                                        >
+                                    <?= htmlspecialchars(
+                                        ucfirst(
+                                            $member["status"]
+                                        )
+                                    ) ?>
 
-                                            <?= htmlspecialchars(
-                                                ucfirst(
-                                                    str_replace(
-                                                        "_",
-                                                        " ",
-                                                        $task["status"]
-                                                    )
-                                                )
-                                            ) ?>
-
-                                        </span>
-
-                                    </td>
+                                </span>
 
 
-                                </tr>
+                            </div>
 
 
-                            <?php endforeach; ?>
+                        <?php endforeach; ?>
 
-
-                            </tbody>
-
-                        </table>
 
                     </div>
 
@@ -1338,20 +1338,9 @@ mysqli_stmt_close($stmt);
                 <?php else: ?>
 
 
-                    <div class="empty-state">
+                    <div class="empty-small">
 
-                        <div class="empty-icon">
-                            ✓
-                        </div>
-
-                        <h3>
-                            No Tasks Yet
-                        </h3>
-
-                        <p>
-                            This project doesn't have any
-                            tasks yet.
-                        </p>
+                        No team members have been assigned to this project yet.
 
                     </div>
 
@@ -1364,9 +1353,12 @@ mysqli_stmt_close($stmt);
 
         </section>
 
+
     </main>
 
+
 </div>
+
 
 </body>
 

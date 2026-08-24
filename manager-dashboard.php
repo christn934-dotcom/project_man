@@ -6,7 +6,7 @@ require_once "config/database.php";
 
 /*
 |--------------------------------------------------------------------------
-| PROJECT MANAGER PROTECTION
+| CHECK LOGIN
 |--------------------------------------------------------------------------
 */
 
@@ -15,20 +15,16 @@ if (!isset($_SESSION["user_id"])) {
     exit;
 }
 
-if (
-    !isset($_SESSION["role"]) ||
-    $_SESSION["role"] !== "project_manager"
-) {
+/*
+|--------------------------------------------------------------------------
+| CHECK ROLE
+|--------------------------------------------------------------------------
+*/
+
+if (!isset($_SESSION["role"]) || $_SESSION["role"] !== "project_manager") {
     header("Location: dashboard.php");
     exit;
 }
-
-
-/*
-|--------------------------------------------------------------------------
-| MANAGER INFORMATION
-|--------------------------------------------------------------------------
-*/
 
 $manager_id = (int) $_SESSION["user_id"];
 $manager_name = $_SESSION["full_name"] ?? "Project Manager";
@@ -45,14 +41,26 @@ $total_projects = 0;
 $query = "
     SELECT COUNT(*) AS total
     FROM projects
-    WHERE manager_id = $manager_id
+    WHERE manager_id = ?
 ";
 
-$result = mysqli_query($conn, $query);
+$stmt = mysqli_prepare($conn, $query);
 
-if ($result) {
-    $row = mysqli_fetch_assoc($result);
-    $total_projects = (int) $row["total"];
+if ($stmt) {
+
+    mysqli_stmt_bind_param($stmt, "i", $manager_id);
+    mysqli_stmt_execute($stmt);
+
+    $result = mysqli_stmt_get_result($stmt);
+
+    if ($result) {
+
+        $row = mysqli_fetch_assoc($result);
+
+        $total_projects = (int) $row["total"];
+    }
+
+    mysqli_stmt_close($stmt);
 }
 
 
@@ -67,15 +75,27 @@ $active_projects = 0;
 $query = "
     SELECT COUNT(*) AS total
     FROM projects
-    WHERE manager_id = $manager_id
+    WHERE manager_id = ?
     AND status = 'in_progress'
 ";
 
-$result = mysqli_query($conn, $query);
+$stmt = mysqli_prepare($conn, $query);
 
-if ($result) {
-    $row = mysqli_fetch_assoc($result);
-    $active_projects = (int) $row["total"];
+if ($stmt) {
+
+    mysqli_stmt_bind_param($stmt, "i", $manager_id);
+    mysqli_stmt_execute($stmt);
+
+    $result = mysqli_stmt_get_result($stmt);
+
+    if ($result) {
+
+        $row = mysqli_fetch_assoc($result);
+
+        $active_projects = (int) $row["total"];
+    }
+
+    mysqli_stmt_close($stmt);
 }
 
 
@@ -90,39 +110,27 @@ $completed_projects = 0;
 $query = "
     SELECT COUNT(*) AS total
     FROM projects
-    WHERE manager_id = $manager_id
+    WHERE manager_id = ?
     AND status = 'completed'
 ";
 
-$result = mysqli_query($conn, $query);
+$stmt = mysqli_prepare($conn, $query);
 
-if ($result) {
-    $row = mysqli_fetch_assoc($result);
-    $completed_projects = (int) $row["total"];
-}
+if ($stmt) {
 
+    mysqli_stmt_bind_param($stmt, "i", $manager_id);
+    mysqli_stmt_execute($stmt);
 
-/*
-|--------------------------------------------------------------------------
-| TOTAL TASKS
-|--------------------------------------------------------------------------
-*/
+    $result = mysqli_stmt_get_result($stmt);
 
-$total_tasks = 0;
+    if ($result) {
 
-$query = "
-    SELECT COUNT(*) AS total
-    FROM tasks t
-    INNER JOIN projects p
-        ON t.project_id = p.id
-    WHERE p.manager_id = $manager_id
-";
+        $row = mysqli_fetch_assoc($result);
 
-$result = mysqli_query($conn, $query);
+        $completed_projects = (int) $row["total"];
+    }
 
-if ($result) {
-    $row = mysqli_fetch_assoc($result);
-    $total_tasks = (int) $row["total"];
+    mysqli_stmt_close($stmt);
 }
 
 
@@ -139,15 +147,27 @@ $query = "
     FROM tasks t
     INNER JOIN projects p
         ON t.project_id = p.id
-    WHERE p.manager_id = $manager_id
+    WHERE p.manager_id = ?
     AND t.status != 'completed'
 ";
 
-$result = mysqli_query($conn, $query);
+$stmt = mysqli_prepare($conn, $query);
 
-if ($result) {
-    $row = mysqli_fetch_assoc($result);
-    $pending_tasks = (int) $row["total"];
+if ($stmt) {
+
+    mysqli_stmt_bind_param($stmt, "i", $manager_id);
+    mysqli_stmt_execute($stmt);
+
+    $result = mysqli_stmt_get_result($stmt);
+
+    if ($result) {
+
+        $row = mysqli_fetch_assoc($result);
+
+        $pending_tasks = (int) $row["total"];
+    }
+
+    mysqli_stmt_close($stmt);
 }
 
 
@@ -164,15 +184,72 @@ $query = "
     FROM tasks t
     INNER JOIN projects p
         ON t.project_id = p.id
-    WHERE p.manager_id = $manager_id
+    WHERE p.manager_id = ?
     AND t.status = 'completed'
 ";
 
-$result = mysqli_query($conn, $query);
+$stmt = mysqli_prepare($conn, $query);
 
-if ($result) {
-    $row = mysqli_fetch_assoc($result);
-    $completed_tasks = (int) $row["total"];
+if ($stmt) {
+
+    mysqli_stmt_bind_param($stmt, "i", $manager_id);
+    mysqli_stmt_execute($stmt);
+
+    $result = mysqli_stmt_get_result($stmt);
+
+    if ($result) {
+
+        $row = mysqli_fetch_assoc($result);
+
+        $completed_tasks = (int) $row["total"];
+    }
+
+    mysqli_stmt_close($stmt);
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| RECENT PROJECTS
+|--------------------------------------------------------------------------
+*/
+
+$recent_projects = [];
+
+$query = "
+    SELECT
+        id,
+        name,
+        description,
+        status,
+        priority,
+        start_date,
+        end_date,
+        created_at
+    FROM projects
+    WHERE manager_id = ?
+    ORDER BY created_at DESC
+    LIMIT 5
+";
+
+$stmt = mysqli_prepare($conn, $query);
+
+if ($stmt) {
+
+    mysqli_stmt_bind_param($stmt, "i", $manager_id);
+    mysqli_stmt_execute($stmt);
+
+    $result = mysqli_stmt_get_result($stmt);
+
+    if ($result) {
+
+        while ($row = mysqli_fetch_assoc($result)) {
+
+            $recent_projects[] = $row;
+        }
+    }
+
+    mysqli_stmt_close($stmt);
 }
 
 
@@ -192,7 +269,7 @@ $query = "
         priority,
         status
     FROM projects
-    WHERE manager_id = $manager_id
+    WHERE manager_id = ?
     AND end_date IS NOT NULL
     AND end_date >= CURDATE()
     AND status != 'completed'
@@ -200,48 +277,24 @@ $query = "
     LIMIT 5
 ";
 
-$result = mysqli_query($conn, $query);
+$stmt = mysqli_prepare($conn, $query);
 
-if ($result) {
+if ($stmt) {
 
-    while ($row = mysqli_fetch_assoc($result)) {
-        $upcoming_deadlines[] = $row;
+    mysqli_stmt_bind_param($stmt, "i", $manager_id);
+    mysqli_stmt_execute($stmt);
+
+    $result = mysqli_stmt_get_result($stmt);
+
+    if ($result) {
+
+        while ($row = mysqli_fetch_assoc($result)) {
+
+            $upcoming_deadlines[] = $row;
+        }
     }
 
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| RECENT PROJECTS
-|--------------------------------------------------------------------------
-*/
-
-$recent_projects = [];
-
-$query = "
-    SELECT
-        id,
-        name,
-        description,
-        start_date,
-        end_date,
-        priority,
-        status
-    FROM projects
-    WHERE manager_id = $manager_id
-    ORDER BY created_at DESC
-    LIMIT 5
-";
-
-$result = mysqli_query($conn, $query);
-
-if ($result) {
-
-    while ($row = mysqli_fetch_assoc($result)) {
-        $recent_projects[] = $row;
-    }
-
+    mysqli_stmt_close($stmt);
 }
 
 
@@ -264,69 +317,30 @@ $query = "
     FROM tasks t
     INNER JOIN projects p
         ON t.project_id = p.id
-    WHERE p.manager_id = $manager_id
+    WHERE p.manager_id = ?
     ORDER BY t.created_at DESC
     LIMIT 5
 ";
 
-$result = mysqli_query($conn, $query);
+$stmt = mysqli_prepare($conn, $query);
 
-if ($result) {
+if ($stmt) {
 
-    while ($row = mysqli_fetch_assoc($result)) {
-        $recent_tasks[] = $row;
+    mysqli_stmt_bind_param($stmt, "i", $manager_id);
+    mysqli_stmt_execute($stmt);
+
+    $result = mysqli_stmt_get_result($stmt);
+
+    if ($result) {
+
+        while ($row = mysqli_fetch_assoc($result)) {
+
+            $recent_tasks[] = $row;
+        }
     }
 
+    mysqli_stmt_close($stmt);
 }
-
-
-/*
-|--------------------------------------------------------------------------
-| RECENT ACTIVITY
-|--------------------------------------------------------------------------
-*/
-
-$activities = [];
-
-$query = "
-    SELECT
-        a.action,
-        a.description,
-        a.created_at,
-        u.full_name
-    FROM activity_logs a
-    INNER JOIN users u
-        ON a.user_id = u.id
-    WHERE
-        a.project_id IN (
-            SELECT id
-            FROM projects
-            WHERE manager_id = $manager_id
-        )
-    ORDER BY a.created_at DESC
-    LIMIT 6
-";
-
-$result = mysqli_query($conn, $query);
-
-if ($result) {
-
-    while ($row = mysqli_fetch_assoc($result)) {
-        $activities[] = $row;
-    }
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| INITIALS
-|--------------------------------------------------------------------------
-*/
-
-$initials = strtoupper(
-    substr($manager_name, 0, 2)
-);
 
 ?>
 
@@ -440,12 +454,12 @@ $initials = strtoupper(
 
 
             <p class="nav-title">
-                MANAGEMENT
+                WORKSPACE
             </p>
 
 
             <a
-                href="team.php"
+                href="manager-team.php"
                 class="nav-item"
             >
 
@@ -459,7 +473,7 @@ $initials = strtoupper(
 
 
             <a
-                href="reports.php"
+                href="manager-reports.php"
                 class="nav-item"
             >
 
@@ -473,7 +487,7 @@ $initials = strtoupper(
 
 
             <p class="nav-title">
-                SYSTEM
+                ACCOUNT
             </p>
 
 
@@ -523,7 +537,9 @@ $initials = strtoupper(
     <main class="main-content">
 
 
-        <!-- TOPBAR -->
+        <!-- =================================================
+             TOPBAR
+        ================================================== -->
 
         <header class="topbar">
 
@@ -556,6 +572,7 @@ $initials = strtoupper(
             </div>
 
 
+
             <div class="topbar-right">
 
 
@@ -572,7 +589,15 @@ $initials = strtoupper(
 
                     <div class="profile-avatar">
 
-                        <?= htmlspecialchars($initials) ?>
+                        <?= htmlspecialchars(
+                            strtoupper(
+                                substr(
+                                    $manager_name,
+                                    0,
+                                    2
+                                )
+                            )
+                        ) ?>
 
                     </div>
 
@@ -581,7 +606,9 @@ $initials = strtoupper(
 
                         <strong>
 
-                            <?= htmlspecialchars($manager_name) ?>
+                            <?= htmlspecialchars(
+                                $manager_name
+                            ) ?>
 
                         </strong>
 
@@ -607,14 +634,16 @@ $initials = strtoupper(
 
 
 
-        <!-- =====================================================
+        <!-- =================================================
              DASHBOARD
-        ====================================================== -->
+        ================================================== -->
 
         <section class="dashboard-content">
 
 
-            <!-- PAGE HEADER -->
+            <!-- =================================================
+                 PAGE HEADER
+            ================================================== -->
 
             <div class="page-header">
 
@@ -622,20 +651,25 @@ $initials = strtoupper(
                 <div>
 
                     <span class="page-label">
-                        PROJECT MANAGEMENT
+                        PROJECT MANAGER
                     </span>
 
 
                     <h1>
 
                         Welcome back,
-                        <?= htmlspecialchars($manager_name) ?>!
+                        <?= htmlspecialchars(
+                            $manager_name
+                        ) ?>!
 
                     </h1>
 
 
                     <p>
-                        Here's an overview of the projects you manage.
+
+                        Here's an overview of the projects
+                        you're managing.
+
                     </p>
 
                 </div>
@@ -668,9 +702,11 @@ $initials = strtoupper(
 
                 <div class="stat-card">
 
+
                     <div class="stat-icon">
                         ▣
                     </div>
+
 
                     <div class="stat-info">
 
@@ -684,16 +720,20 @@ $initials = strtoupper(
 
                     </div>
 
+
                 </div>
+
 
 
                 <!-- ACTIVE PROJECTS -->
 
                 <div class="stat-card">
 
+
                     <div class="stat-icon">
                         ◉
                     </div>
+
 
                     <div class="stat-info">
 
@@ -707,16 +747,47 @@ $initials = strtoupper(
 
                     </div>
 
+
                 </div>
+
+
+
+                <!-- COMPLETED PROJECTS -->
+
+                <div class="stat-card">
+
+
+                    <div class="stat-icon">
+                        ✓
+                    </div>
+
+
+                    <div class="stat-info">
+
+                        <span>
+                            Completed Projects
+                        </span>
+
+                        <strong>
+                            <?= $completed_projects ?>
+                        </strong>
+
+                    </div>
+
+
+                </div>
+
 
 
                 <!-- PENDING TASKS -->
 
                 <div class="stat-card">
 
+
                     <div class="stat-icon">
-                        ✓
+                        !
                     </div>
+
 
                     <div class="stat-info">
 
@@ -730,28 +801,6 @@ $initials = strtoupper(
 
                     </div>
 
-                </div>
-
-
-                <!-- COMPLETED TASKS -->
-
-                <div class="stat-card">
-
-                    <div class="stat-icon">
-                        ★
-                    </div>
-
-                    <div class="stat-info">
-
-                        <span>
-                            Completed Tasks
-                        </span>
-
-                        <strong>
-                            <?= $completed_tasks ?>
-                        </strong>
-
-                    </div>
 
                 </div>
 
@@ -774,6 +823,7 @@ $initials = strtoupper(
 
                     <div class="card-header">
 
+
                         <div>
 
                             <h2>
@@ -781,10 +831,11 @@ $initials = strtoupper(
                             </h2>
 
                             <p>
-                                Current status of your projects
+                                Your current project progress
                             </p>
 
                         </div>
+
 
                     </div>
 
@@ -845,6 +896,7 @@ $initials = strtoupper(
 
                     <div class="card-header">
 
+
                         <div>
 
                             <h2>
@@ -857,23 +909,11 @@ $initials = strtoupper(
 
                         </div>
 
+
                     </div>
 
 
                     <div class="task-overview">
-
-
-                        <div class="task-stat">
-
-                            <span>
-                                Total
-                            </span>
-
-                            <strong>
-                                <?= $total_tasks ?>
-                            </strong>
-
-                        </div>
 
 
                         <div class="task-stat">
@@ -925,11 +965,11 @@ $initials = strtoupper(
                     <div>
 
                         <h2>
-                            My Recent Projects
+                            Recent Projects
                         </h2>
 
                         <p>
-                            Recently created projects assigned to you
+                            Your most recently created projects
                         </p>
 
                     </div>
@@ -946,7 +986,8 @@ $initials = strtoupper(
                 </div>
 
 
-                <?php if (count($recent_projects) > 0): ?>
+
+                <?php if (!empty($recent_projects)): ?>
 
 
                     <div class="table-container">
@@ -968,7 +1009,7 @@ $initials = strtoupper(
                                     </th>
 
                                     <th>
-                                        End Date
+                                        Deadline
                                     </th>
 
                                     <th>
@@ -998,16 +1039,19 @@ $initials = strtoupper(
 
                                         <td>
 
+
                                             <div class="project-name">
 
 
                                                 <div class="project-avatar">
 
-                                                    <?= strtoupper(
-                                                        substr(
-                                                            $project["name"],
-                                                            0,
-                                                            1
+                                                    <?= htmlspecialchars(
+                                                        strtoupper(
+                                                            substr(
+                                                                $project["name"],
+                                                                0,
+                                                                1
+                                                            )
                                                         )
                                                     ) ?>
 
@@ -1025,50 +1069,65 @@ $initials = strtoupper(
                                                     </strong>
 
 
-                                                    <?php if (
-                                                        !empty(
+                                                    <span>
+
+                                                        <?= htmlspecialchars(
                                                             $project["description"]
-                                                        )
-                                                    ): ?>
+                                                            ?: "No description"
+                                                        ) ?>
 
-                                                        <span>
-
-                                                            <?= htmlspecialchars(
-                                                                $project["description"]
-                                                            ) ?>
-
-                                                        </span>
-
-                                                    <?php endif; ?>
-
+                                                    </span>
 
                                                 </div>
 
 
                                             </div>
 
+
                                         </td>
+
 
 
                                         <td>
 
                                             <?= htmlspecialchars(
-                                                $project["start_date"]
+                                                date(
+                                                    "M d, Y",
+                                                    strtotime(
+                                                        $project["start_date"]
+                                                    )
+                                                )
                                             ) ?>
 
                                         </td>
 
 
+
                                         <td>
 
-                                            <?= $project["end_date"]
-                                                ? htmlspecialchars(
+                                            <?php if (
+                                                !empty(
                                                     $project["end_date"]
                                                 )
-                                                : "—"
-                                            ?>
+                                            ): ?>
+
+                                                <?= htmlspecialchars(
+                                                    date(
+                                                        "M d, Y",
+                                                        strtotime(
+                                                            $project["end_date"]
+                                                        )
+                                                    )
+                                                ) ?>
+
+                                            <?php else: ?>
+
+                                                —
+
+                                            <?php endif; ?>
 
                                         </td>
+
 
 
                                         <td>
@@ -1079,8 +1138,8 @@ $initials = strtoupper(
                                                 ) ?>"
                                             >
 
-                                                <?= ucfirst(
-                                                    htmlspecialchars(
+                                                <?= htmlspecialchars(
+                                                    ucfirst(
                                                         $project["priority"]
                                                     )
                                                 ) ?>
@@ -1088,6 +1147,7 @@ $initials = strtoupper(
                                             </span>
 
                                         </td>
+
 
 
                                         <td>
@@ -1098,11 +1158,11 @@ $initials = strtoupper(
                                                 ) ?>"
                                             >
 
-                                                <?= ucfirst(
-                                                    str_replace(
-                                                        "_",
-                                                        " ",
-                                                        htmlspecialchars(
+                                                <?= htmlspecialchars(
+                                                    ucfirst(
+                                                        str_replace(
+                                                            "_",
+                                                            " ",
                                                             $project["status"]
                                                         )
                                                     )
@@ -1133,17 +1193,21 @@ $initials = strtoupper(
 
                     <div class="empty-state">
 
+
                         <div class="empty-icon">
                             ▣
                         </div>
 
+
                         <h3>
-                            No projects assigned
+                            No Projects Yet
                         </h3>
 
+
                         <p>
-                            You don't have any projects assigned to you yet.
+                            You currently have no projects assigned to you.
                         </p>
+
 
                     </div>
 
@@ -1156,7 +1220,7 @@ $initials = strtoupper(
 
 
             <!-- =================================================
-                 DEADLINES + RECENT TASKS
+                 DEADLINES + TASKS
             ================================================== -->
 
             <div class="dashboard-grid">
@@ -1182,11 +1246,15 @@ $initials = strtoupper(
 
                         </div>
 
+
                     </div>
 
 
+
                     <?php if (
-                        count($upcoming_deadlines) > 0
+                        !empty(
+                            $upcoming_deadlines
+                        )
                     ): ?>
 
 
@@ -1204,6 +1272,7 @@ $initials = strtoupper(
 
                                     <div>
 
+
                                         <strong>
 
                                             <?= htmlspecialchars(
@@ -1216,11 +1285,18 @@ $initials = strtoupper(
                                         <span>
 
                                             Due:
+
                                             <?= htmlspecialchars(
-                                                $deadline["end_date"]
+                                                date(
+                                                    "M d, Y",
+                                                    strtotime(
+                                                        $deadline["end_date"]
+                                                    )
+                                                )
                                             ) ?>
 
                                         </span>
+
 
                                     </div>
 
@@ -1230,45 +1306,87 @@ $initials = strtoupper(
                                             $deadline["priority"]
                                         ) ?>"
                                     >
-                                        <?= ucfirst(
-                                            htmlspecialchars(
+
+                                        <?= htmlspecialchars(
+                                            ucfirst(
                                                 $deadline["priority"]
                                             )
                                         ) ?>
+
                                     </span>
+
+
                                 </div>
+
+
                             <?php endforeach; ?>
+
+
                         </div>
+
+
                     <?php else: ?>
+
+
                         <div class="empty-state small">
+
+
                             <div class="empty-icon">
                                 ✓
                             </div>
+
+
                             <p>
                                 No upcoming deadlines.
                             </p>
+
+
                         </div>
+
+
                     <?php endif; ?>
+
+
                 </div>
+
+
+
                 <!-- RECENT TASKS -->
+
                 <div class="dashboard-card">
+
+
                     <div class="card-header">
+
+
                         <div>
+
                             <h2>
                                 Recent Tasks
                             </h2>
+
                             <p>
-                                Latest tasks in your projects
+                                Latest tasks from your projects
                             </p>
+
                         </div>
+
+
                         <a
                             href="manager-tasks.php"
                             class="text-button"
                         >
                             View All
                         </a>
+
+
                     </div>
-                    <?php if (count($recent_tasks) > 0): ?>
+
+
+
+                    <?php if (!empty($recent_tasks)): ?>
+
+
                         <div class="deadline-list">
 
 
@@ -1282,6 +1400,7 @@ $initials = strtoupper(
 
 
                                     <div>
+
 
                                         <strong>
 
@@ -1300,6 +1419,7 @@ $initials = strtoupper(
 
                                         </span>
 
+
                                     </div>
 
 
@@ -1309,11 +1429,11 @@ $initials = strtoupper(
                                         ) ?>"
                                     >
 
-                                        <?= ucfirst(
-                                            str_replace(
-                                                "_",
-                                                " ",
-                                                htmlspecialchars(
+                                        <?= htmlspecialchars(
+                                            ucfirst(
+                                                str_replace(
+                                                    "_",
+                                                    " ",
                                                     $task["status"]
                                                 )
                                             )
@@ -1336,13 +1456,16 @@ $initials = strtoupper(
 
                         <div class="empty-state small">
 
+
                             <div class="empty-icon">
                                 ✓
                             </div>
 
+
                             <p>
                                 No tasks yet.
                             </p>
+
 
                         </div>
 
@@ -1351,120 +1474,6 @@ $initials = strtoupper(
 
 
                 </div>
-
-
-            </div>
-
-
-
-            <!-- =================================================
-                 RECENT ACTIVITY
-            ================================================== -->
-
-            <div class="dashboard-card">
-
-
-                <div class="card-header">
-
-
-                    <div>
-
-                        <h2>
-                            Recent Activity
-                        </h2>
-
-                        <p>
-                            Latest activity in your projects
-                        </p>
-
-                    </div>
-
-
-                </div>
-
-
-                <?php if (count($activities) > 0): ?>
-
-
-                    <div class="activity-list">
-
-
-                        <?php foreach (
-                            $activities
-                            as $activity
-                        ): ?>
-
-
-                            <div class="activity-item">
-
-
-                                <div class="activity-icon">
-                                    •
-                                </div>
-
-
-                                <div>
-
-
-                                    <strong>
-
-                                        <?= htmlspecialchars(
-                                            $activity["full_name"]
-                                        ) ?>
-
-                                    </strong>
-
-
-                                    <p>
-
-                                        <?= htmlspecialchars(
-                                            $activity["description"]
-                                        ) ?>
-
-                                    </p>
-
-
-                                    <small>
-
-                                        <?= htmlspecialchars(
-                                            $activity["created_at"]
-                                        ) ?>
-
-                                    </small>
-
-
-                                </div>
-
-
-                            </div>
-
-
-                        <?php endforeach; ?>
-
-
-                    </div>
-
-
-                <?php else: ?>
-
-
-                    <div class="empty-state small">
-
-
-                        <div class="empty-icon">
-                            •
-                        </div>
-
-
-                        <p>
-                            No recent activity.
-                        </p>
-
-
-                    </div>
-
-
-                <?php endif; ?>
 
 
             </div>
