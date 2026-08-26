@@ -43,343 +43,30 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
 
 /*
 |--------------------------------------------------------------------------
-| FILTER VALUES
-|--------------------------------------------------------------------------
-*/
-
-$status_filter = $_GET["status"] ?? "all";
-
-$priority_filter = $_GET["priority"] ?? "all";
-
-$search = trim($_GET["search"] ?? "");
-
-
-/*
-|--------------------------------------------------------------------------
-| ALLOWED FILTER VALUES
-|--------------------------------------------------------------------------
-*/
-
-$allowed_statuses = [
-    "all",
-    "to_do",
-    "in_progress",
-    "review",
-    "completed"
-];
-
-
-$allowed_priorities = [
-    "all",
-    "low",
-    "medium",
-    "high",
-    "urgent"
-];
-
-
-if (!in_array($status_filter, $allowed_statuses, true)) {
-
-    $status_filter = "all";
-
-}
-
-
-if (!in_array($priority_filter, $allowed_priorities, true)) {
-
-    $priority_filter = "all";
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| TASK STATISTICS
-|--------------------------------------------------------------------------
-*/
-
-$total_tasks = 0;
-
-$pending_tasks = 0;
-
-$in_progress_tasks = 0;
-
-$review_tasks = 0;
-
-$completed_tasks = 0;
-
-
-/*
-|--------------------------------------------------------------------------
-| TOTAL TASKS
-|--------------------------------------------------------------------------
-*/
-
-$query = "
-    SELECT COUNT(*) AS total
-    FROM tasks t
-
-    INNER JOIN projects p
-        ON t.project_id = p.id
-
-    WHERE p.manager_id = ?
-";
-
-
-$stmt = mysqli_prepare($conn, $query);
-
-
-if ($stmt) {
-
-    mysqli_stmt_bind_param(
-        $stmt,
-        "i",
-        $manager_id
-    );
-
-    mysqli_stmt_execute($stmt);
-
-    $result = mysqli_stmt_get_result($stmt);
-
-
-    if ($result) {
-
-        $row = mysqli_fetch_assoc($result);
-
-        $total_tasks = (int) $row["total"];
-
-    }
-
-
-    mysqli_stmt_close($stmt);
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| PENDING TASKS
-|--------------------------------------------------------------------------
-*/
-
-$query = "
-    SELECT COUNT(*) AS total
-    FROM tasks t
-
-    INNER JOIN projects p
-        ON t.project_id = p.id
-
-    WHERE p.manager_id = ?
-
-    AND t.status = 'to_do'
-";
-
-
-$stmt = mysqli_prepare($conn, $query);
-
-
-if ($stmt) {
-
-    mysqli_stmt_bind_param(
-        $stmt,
-        "i",
-        $manager_id
-    );
-
-    mysqli_stmt_execute($stmt);
-
-    $result = mysqli_stmt_get_result($stmt);
-
-
-    if ($result) {
-
-        $row = mysqli_fetch_assoc($result);
-
-        $pending_tasks = (int) $row["total"];
-
-    }
-
-
-    mysqli_stmt_close($stmt);
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| IN PROGRESS TASKS
-|--------------------------------------------------------------------------
-*/
-
-$query = "
-    SELECT COUNT(*) AS total
-    FROM tasks t
-
-    INNER JOIN projects p
-        ON t.project_id = p.id
-
-    WHERE p.manager_id = ?
-
-    AND t.status = 'in_progress'
-";
-
-
-$stmt = mysqli_prepare($conn, $query);
-
-
-if ($stmt) {
-
-    mysqli_stmt_bind_param(
-        $stmt,
-        "i",
-        $manager_id
-    );
-
-    mysqli_stmt_execute($stmt);
-
-    $result = mysqli_stmt_get_result($stmt);
-
-
-    if ($result) {
-
-        $row = mysqli_fetch_assoc($result);
-
-        $in_progress_tasks = (int) $row["total"];
-
-    }
-
-
-    mysqli_stmt_close($stmt);
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| REVIEW TASKS
-|--------------------------------------------------------------------------
-*/
-
-$query = "
-    SELECT COUNT(*) AS total
-    FROM tasks t
-
-    INNER JOIN projects p
-        ON t.project_id = p.id
-
-    WHERE p.manager_id = ?
-
-    AND t.status = 'review'
-";
-
-
-$stmt = mysqli_prepare($conn, $query);
-
-
-if ($stmt) {
-
-    mysqli_stmt_bind_param(
-        $stmt,
-        "i",
-        $manager_id
-    );
-
-    mysqli_stmt_execute($stmt);
-
-    $result = mysqli_stmt_get_result($stmt);
-
-
-    if ($result) {
-
-        $row = mysqli_fetch_assoc($result);
-
-        $review_tasks = (int) $row["total"];
-
-    }
-
-
-    mysqli_stmt_close($stmt);
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| COMPLETED TASKS
-|--------------------------------------------------------------------------
-*/
-
-$query = "
-    SELECT COUNT(*) AS total
-    FROM tasks t
-
-    INNER JOIN projects p
-        ON t.project_id = p.id
-
-    WHERE p.manager_id = ?
-
-    AND t.status = 'completed'
-";
-
-
-$stmt = mysqli_prepare($conn, $query);
-
-
-if ($stmt) {
-
-    mysqli_stmt_bind_param(
-        $stmt,
-        "i",
-        $manager_id
-    );
-
-    mysqli_stmt_execute($stmt);
-
-    $result = mysqli_stmt_get_result($stmt);
-
-
-    if ($result) {
-
-        $row = mysqli_fetch_assoc($result);
-
-        $completed_tasks = (int) $row["total"];
-
-    }
-
-
-    mysqli_stmt_close($stmt);
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
 | GET MANAGER TASKS
 |--------------------------------------------------------------------------
+|
+| We only retrieve tasks that belong to projects
+| managed by the currently logged-in project manager.
+|
 */
 
 $tasks = [];
 
-
 $query = "
     SELECT
-
         t.id,
         t.title,
         t.description,
-        t.due_date,
-        t.priority,
         t.status,
-        t.estimated_hours,
-        t.actual_hours,
+        t.priority,
+        t.due_date,
         t.created_at,
 
         p.id AS project_id,
         p.name AS project_name,
 
-        u.id AS assignee_id,
-        u.full_name AS assignee_name,
-        u.email AS assignee_email
+        u.full_name AS member_name
 
     FROM tasks t
 
@@ -390,95 +77,12 @@ $query = "
         ON t.assigned_to = u.id
 
     WHERE p.manager_id = ?
-";
 
-
-$params = [$manager_id];
-
-$types = "i";
-
-
-/*
-|--------------------------------------------------------------------------
-| STATUS FILTER
-|--------------------------------------------------------------------------
-*/
-
-if ($status_filter !== "all") {
-
-    $query .= "
-        AND t.status = ?
-    ";
-
-    $params[] = $status_filter;
-
-    $types .= "s";
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| PRIORITY FILTER
-|--------------------------------------------------------------------------
-*/
-
-if ($priority_filter !== "all") {
-
-    $query .= "
-        AND t.priority = ?
-    ";
-
-    $params[] = $priority_filter;
-
-    $types .= "s";
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| SEARCH
-|--------------------------------------------------------------------------
-*/
-
-if ($search !== "") {
-
-    $query .= "
-        AND (
-            t.title LIKE ?
-            OR t.description LIKE ?
-            OR p.name LIKE ?
-            OR u.full_name LIKE ?
-        )
-    ";
-
-    $search_value = "%" . $search . "%";
-
-    $params[] = $search_value;
-    $params[] = $search_value;
-    $params[] = $search_value;
-    $params[] = $search_value;
-
-    $types .= "ssss";
-
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| ORDER
-|--------------------------------------------------------------------------
-*/
-
-$query .= "
     ORDER BY
         CASE
-            WHEN t.status = 'to_do' THEN 1
-            WHEN t.status = 'in_progress' THEN 2
-            WHEN t.status = 'review' THEN 3
-            WHEN t.status = 'completed' THEN 4
-            ELSE 5
+            WHEN t.status != 'completed'
+            THEN 0
+            ELSE 1
         END,
         t.due_date ASC,
         t.created_at DESC
@@ -492,14 +96,13 @@ if ($stmt) {
 
     mysqli_stmt_bind_param(
         $stmt,
-        $types,
-        ...$params
+        "i",
+        $manager_id
     );
 
     mysqli_stmt_execute($stmt);
 
     $result = mysqli_stmt_get_result($stmt);
-
 
     if ($result) {
 
@@ -511,21 +114,67 @@ if ($stmt) {
 
     }
 
-
     mysqli_stmt_close($stmt);
-
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| FILTERED TASK COUNT
+| TASK COUNTS
 |--------------------------------------------------------------------------
 */
 
-$filtered_task_count = count($tasks);
+$total_tasks = count($tasks);
+
+$pending_tasks = 0;
+$in_progress_tasks = 0;
+$completed_tasks = 0;
+$overdue_tasks = 0;
+
+
+foreach ($tasks as $task) {
+
+    /*
+    |--------------------------------------------------------------
+    | Status counts
+    |--------------------------------------------------------------
+    */
+
+    if ($task["status"] === "completed") {
+
+        $completed_tasks++;
+
+    } elseif ($task["status"] === "in_progress") {
+
+        $in_progress_tasks++;
+
+    } else {
+
+        $pending_tasks++;
+
+    }
+
+
+    /*
+    |--------------------------------------------------------------
+    | Overdue tasks
+    |--------------------------------------------------------------
+    */
+
+    if (
+        !empty($task["due_date"]) &&
+        $task["due_date"] < date("Y-m-d") &&
+        $task["status"] !== "completed"
+    ) {
+
+        $overdue_tasks++;
+
+    }
+
+}
 
 ?>
+
 
 <!DOCTYPE html>
 
@@ -544,289 +193,10 @@ $filtered_task_count = count($tasks);
         Tasks | PMS
     </title>
 
-
     <link
         rel="stylesheet"
         href="assets/css/style.css"
     >
-
-
-    <style>
-
-        /*
-        |--------------------------------------------------------------------------
-        | TASK PAGE EXTRA STYLES
-        |--------------------------------------------------------------------------
-        */
-
-        .task-filter-bar {
-
-            display: flex;
-
-            gap: 12px;
-
-            align-items: center;
-
-            flex-wrap: wrap;
-
-            margin-bottom: 24px;
-
-        }
-
-
-        .task-search-form {
-
-            display: flex;
-
-            gap: 10px;
-
-            flex: 1;
-
-            min-width: 240px;
-
-        }
-
-
-        .task-search-form input {
-
-            width: 100%;
-
-            padding: 11px 14px;
-
-            border: 1px solid #ddd;
-
-            border-radius: 8px;
-
-            outline: none;
-
-            font-size: 14px;
-
-        }
-
-
-        .task-filter {
-
-            padding: 11px 14px;
-
-            border: 1px solid #ddd;
-
-            border-radius: 8px;
-
-            background: #fff;
-
-            font-size: 14px;
-
-            cursor: pointer;
-
-        }
-
-
-        .task-summary {
-
-            display: flex;
-
-            gap: 20px;
-
-            flex-wrap: wrap;
-
-            margin-bottom: 24px;
-
-        }
-
-
-        .task-summary-item {
-
-            background: #fff;
-
-            border: 1px solid #eee;
-
-            border-radius: 10px;
-
-            padding: 14px 18px;
-
-            min-width: 130px;
-
-        }
-
-
-        .task-summary-item span {
-
-            display: block;
-
-            font-size: 13px;
-
-            margin-bottom: 5px;
-
-            opacity: .7;
-
-        }
-
-
-        .task-summary-item strong {
-
-            font-size: 24px;
-
-        }
-
-
-        .task-title-cell strong {
-
-            display: block;
-
-            margin-bottom: 4px;
-
-        }
-
-
-        .task-title-cell small {
-
-            display: block;
-
-            opacity: .65;
-
-            max-width: 260px;
-
-            white-space: nowrap;
-
-            overflow: hidden;
-
-            text-overflow: ellipsis;
-
-        }
-
-
-        .task-project-name {
-
-            font-weight: 600;
-
-        }
-
-
-        .task-assignee {
-
-            display: flex;
-
-            align-items: center;
-
-            gap: 8px;
-
-        }
-
-
-        .task-assignee-avatar {
-
-            width: 34px;
-
-            height: 34px;
-
-            border-radius: 50%;
-
-            display: flex;
-
-            align-items: center;
-
-            justify-content: center;
-
-            font-size: 12px;
-
-            font-weight: 700;
-
-            background: #eee;
-
-        }
-
-
-        .task-assignee-info strong {
-
-            display: block;
-
-            font-size: 13px;
-
-        }
-
-
-        .task-assignee-info small {
-
-            display: block;
-
-            font-size: 11px;
-
-            opacity: .65;
-
-        }
-
-
-        .task-action-button {
-
-            border: none;
-
-            background: transparent;
-
-            cursor: pointer;
-
-            font-size: 20px;
-
-            padding: 5px 10px;
-
-        }
-
-
-        .task-empty {
-
-            text-align: center;
-
-            padding: 60px 20px;
-
-        }
-
-
-        .task-empty .empty-icon {
-
-            font-size: 40px;
-
-            margin-bottom: 10px;
-
-        }
-
-
-        .task-count {
-
-            font-size: 14px;
-
-            opacity: .7;
-
-        }
-
-
-        @media (max-width: 768px) {
-
-            .task-filter-bar {
-
-                flex-direction: column;
-
-                align-items: stretch;
-
-            }
-
-
-            .task-search-form {
-
-                width: 100%;
-
-            }
-
-
-            .task-summary {
-
-                display: grid;
-
-                grid-template-columns: repeat(2, 1fr);
-
-            }
-
-        }
-
-    </style>
 
 </head>
 
@@ -841,17 +211,16 @@ $filtered_task_count = count($tasks);
          SIDEBAR
     ====================================================== -->
 
-
     <aside class="sidebar">
 
 
-        <div class="sidebar-logo">
+        <!-- LOGO -->
 
+        <div class="sidebar-logo">
 
             <div class="logo-icon">
                 P
             </div>
-
 
             <div>
 
@@ -865,10 +234,11 @@ $filtered_task_count = count($tasks);
 
             </div>
 
-
         </div>
 
 
+
+        <!-- NAVIGATION -->
 
         <nav class="sidebar-nav">
 
@@ -978,8 +348,9 @@ $filtered_task_count = count($tasks);
 
 
 
-        <div class="sidebar-bottom">
+        <!-- LOGOUT -->
 
+        <div class="sidebar-bottom">
 
             <a
                 href="logout.php"
@@ -994,7 +365,6 @@ $filtered_task_count = count($tasks);
 
             </a>
 
-
         </div>
 
 
@@ -1006,14 +376,12 @@ $filtered_task_count = count($tasks);
          MAIN CONTENT
     ====================================================== -->
 
-
     <main class="main-content">
 
 
         <!-- =================================================
              TOPBAR
         ================================================== -->
-
 
         <header class="topbar">
 
@@ -1025,7 +393,9 @@ $filtered_task_count = count($tasks);
                     class="mobile-menu"
                     type="button"
                 >
+
                     ☰
+
                 </button>
 
 
@@ -1037,8 +407,8 @@ $filtered_task_count = count($tasks);
 
                     <input
                         type="text"
+                        id="taskSearch"
                         placeholder="Search tasks..."
-                        id="quickTaskSearch"
                     >
 
                 </div>
@@ -1055,8 +425,11 @@ $filtered_task_count = count($tasks);
                     class="notification-button"
                     type="button"
                 >
+
                     ♧
+
                 </button>
+
 
 
                 <div class="admin-profile">
@@ -1092,7 +465,6 @@ $filtered_task_count = count($tasks);
                             Project Manager
                         </span>
 
-
                     </div>
 
 
@@ -1115,23 +487,18 @@ $filtered_task_count = count($tasks);
              PAGE CONTENT
         ================================================== -->
 
-
         <section class="dashboard-content">
 
 
-            <!-- =================================================
-                 PAGE HEADER
-            ================================================== -->
-
+            <!-- PAGE HEADER -->
 
             <div class="page-header">
 
 
                 <div>
 
-
                     <span class="page-label">
-                        WORK MANAGEMENT
+                        TASK MANAGEMENT
                     </span>
 
 
@@ -1141,23 +508,21 @@ $filtered_task_count = count($tasks);
 
 
                     <p>
-                        Manage tasks across all your projects.
+                        Manage and monitor tasks across your projects.
                     </p>
-
 
                 </div>
 
 
                 <div class="page-actions">
 
+                    <span class="project-count">
 
-                    <a
-                        href="manager-create-task.php"
-                        class="primary-button"
-                    >
-                        + New Task
-                    </a>
+                        <?= $total_tasks ?>
 
+                        Task<?= $total_tasks != 1 ? "s" : "" ?>
+
+                    </span>
 
                 </div>
 
@@ -1167,74 +532,119 @@ $filtered_task_count = count($tasks);
 
 
             <!-- =================================================
-                 TASK SUMMARY
+                 TASK STATISTICS
             ================================================== -->
 
+            <div class="stats-grid">
 
-            <div class="task-summary">
+
+                <!-- TOTAL -->
+
+                <div class="stat-card">
 
 
-                <div class="task-summary-item">
+                    <div class="stat-icon">
+                        ✓
+                    </div>
 
-                    <span>
-                        Total Tasks
-                    </span>
 
-                    <strong>
-                        <?= $total_tasks ?>
-                    </strong>
+                    <div class="stat-info">
+
+                        <span>
+                            Total Tasks
+                        </span>
+
+
+                        <strong>
+                            <?= $total_tasks ?>
+                        </strong>
+
+                    </div>
+
 
                 </div>
 
 
-                <div class="task-summary-item">
 
-                    <span>
-                        To Do
-                    </span>
+                <!-- PENDING -->
 
-                    <strong>
-                        <?= $pending_tasks ?>
-                    </strong>
+                <div class="stat-card">
+
+
+                    <div class="stat-icon">
+                        ◷
+                    </div>
+
+
+                    <div class="stat-info">
+
+                        <span>
+                            Pending
+                        </span>
+
+
+                        <strong>
+                            <?= $pending_tasks ?>
+                        </strong>
+
+                    </div>
+
 
                 </div>
 
 
-                <div class="task-summary-item">
 
-                    <span>
-                        In Progress
-                    </span>
+                <!-- IN PROGRESS -->
 
-                    <strong>
-                        <?= $in_progress_tasks ?>
-                    </strong>
+                <div class="stat-card">
+
+
+                    <div class="stat-icon">
+                        ↻
+                    </div>
+
+
+                    <div class="stat-info">
+
+                        <span>
+                            In Progress
+                        </span>
+
+
+                        <strong>
+                            <?= $in_progress_tasks ?>
+                        </strong>
+
+                    </div>
+
 
                 </div>
 
 
-                <div class="task-summary-item">
 
-                    <span>
-                        Review
-                    </span>
+                <!-- COMPLETED -->
 
-                    <strong>
-                        <?= $review_tasks ?>
-                    </strong>
-
-                </div>
+                <div class="stat-card">
 
 
-                <div class="task-summary-item">
+                    <div class="stat-icon">
+                        ✔
+                    </div>
 
-                    <span>
-                        Completed
-                    </span>
 
-                    <strong>
-                        <?= $completed_tasks ?>
-                    </strong>
+                    <div class="stat-info">
+
+                        <span>
+                            Completed
+                        </span>
+
+
+                        <strong>
+                            <?= $completed_tasks ?>
+                        </strong>
+
+                    </div>
+
 
                 </div>
 
@@ -1247,129 +657,6 @@ $filtered_task_count = count($tasks);
                  FILTERS
             ================================================== -->
 
-
-            <div class="task-filter-bar">
-
-
-                <form
-                    method="GET"
-                    action="manager-tasks.php"
-                    class="task-search-form"
-                    id="taskFilterForm"
-                >
-
-
-                    <input
-                        type="text"
-                        name="search"
-                        id="taskSearch"
-                        placeholder="Search task, project or assignee..."
-                        value="<?= htmlspecialchars($search) ?>"
-                    >
-
-
-                    <select
-                        name="status"
-                        class="task-filter"
-                    >
-
-                        <option value="all"
-                            <?= $status_filter === "all" ? "selected" : "" ?>>
-                            All Statuses
-                        </option>
-
-                        <option value="to_do"
-                            <?= $status_filter === "to_do" ? "selected" : "" ?>>
-                            To Do
-                        </option>
-
-                        <option value="in_progress"
-                            <?= $status_filter === "in_progress" ? "selected" : "" ?>>
-                            In Progress
-                        </option>
-
-                        <option value="review"
-                            <?= $status_filter === "review" ? "selected" : "" ?>>
-                            Review
-                        </option>
-
-                        <option value="completed"
-                            <?= $status_filter === "completed" ? "selected" : "" ?>>
-                            Completed
-                        </option>
-
-                    </select>
-
-
-                    <select
-                        name="priority"
-                        class="task-filter"
-                    >
-
-                        <option value="all"
-                            <?= $priority_filter === "all" ? "selected" : "" ?>>
-                            All Priorities
-                        </option>
-
-                        <option value="low"
-                            <?= $priority_filter === "low" ? "selected" : "" ?>>
-                            Low
-                        </option>
-
-                        <option value="medium"
-                            <?= $priority_filter === "medium" ? "selected" : "" ?>>
-                            Medium
-                        </option>
-
-                        <option value="high"
-                            <?= $priority_filter === "high" ? "selected" : "" ?>>
-                            High
-                        </option>
-
-                        <option value="urgent"
-                            <?= $priority_filter === "urgent" ? "selected" : "" ?>>
-                            Urgent
-                        </option>
-
-                    </select>
-
-
-                    <button
-                        type="submit"
-                        class="primary-button"
-                    >
-                        Filter
-                    </button>
-
-
-                    <?php if (
-                        $search !== "" ||
-                        $status_filter !== "all" ||
-                        $priority_filter !== "all"
-                    ): ?>
-
-                        <a
-                            href="manager-tasks.php"
-                            class="secondary-button"
-                        >
-                            Clear
-                        </a>
-
-                    <?php endif; ?>
-
-
-                </form>
-
-
-            </div>
-
-
-
-            <!-- =================================================
-                 TASK TABLE
-            ================================================== -->
-
-
             <div class="dashboard-card">
 
 
@@ -1378,24 +665,70 @@ $filtered_task_count = count($tasks);
 
                     <div>
 
-
                         <h2>
                             Project Tasks
                         </h2>
 
 
-                        <p class="task-count">
-
-                            Showing
-                            <?= $filtered_task_count ?>
-
-                            of
-
-                            <?= $total_tasks ?>
-
-                            task(s)
-
+                        <p>
+                            Tasks assigned to your projects
                         </p>
+
+                    </div>
+
+
+                    <div class="task-filters">
+
+
+                        <select
+                            id="statusFilter"
+                        >
+
+                            <option value="">
+                                All Statuses
+                            </option>
+
+                            <option value="pending">
+                                Pending
+                            </option>
+
+                            <option value="in_progress">
+                                In Progress
+                            </option>
+
+                            <option value="completed">
+                                Completed
+                            </option>
+
+                        </select>
+
+
+
+                        <select
+                            id="priorityFilter"
+                        >
+
+                            <option value="">
+                                All Priorities
+                            </option>
+
+                            <option value="low">
+                                Low
+                            </option>
+
+                            <option value="medium">
+                                Medium
+                            </option>
+
+                            <option value="high">
+                                High
+                            </option>
+
+                            <option value="urgent">
+                                Urgent
+                            </option>
+
+                        </select>
 
 
                     </div>
@@ -1404,6 +737,10 @@ $filtered_task_count = count($tasks);
                 </div>
 
 
+
+                <!-- =================================================
+                     TASK TABLE
+                ================================================== -->
 
                 <?php if (!empty($tasks)): ?>
 
@@ -1422,41 +759,33 @@ $filtered_task_count = count($tasks);
 
                                 <tr>
 
-
                                     <th>
                                         Task
                                     </th>
-
 
                                     <th>
                                         Project
                                     </th>
 
-
                                     <th>
                                         Assigned To
                                     </th>
-
 
                                     <th>
                                         Due Date
                                     </th>
 
-
                                     <th>
                                         Priority
                                     </th>
-
 
                                     <th>
                                         Status
                                     </th>
 
-
                                     <th>
                                         Action
                                     </th>
-
 
                                 </tr>
 
@@ -1468,54 +797,79 @@ $filtered_task_count = count($tasks);
                             <tbody>
 
 
-                                <?php foreach (
-                                    $tasks
-                                    as $task
-                                ): ?>
+                                <?php foreach ($tasks as $task): ?>
+
+
+                                    <?php
+
+                                    $status = $task["status"] ?? "pending";
+
+                                    $priority = $task["priority"] ?? "medium";
+
+                                    $is_overdue =
+                                        !empty($task["due_date"]) &&
+                                        $task["due_date"] < date("Y-m-d") &&
+                                        $status !== "completed";
+
+                                    ?>
 
 
                                     <tr
                                         class="task-row"
-                                        data-search="<?= htmlspecialchars(
-                                            strtolower(
-                                                $task["title"]
-                                                . " "
-                                                . ($task["description"] ?? "")
-                                                . " "
-                                                . $task["project_name"]
-                                                . " "
-                                                . ($task["assignee_name"] ?? "")
-                                            )
-                                        ) ?>"
+                                        data-status="<?= htmlspecialchars($status) ?>"
+                                        data-priority="<?= htmlspecialchars($priority) ?>"
                                     >
 
 
                                         <!-- TASK -->
 
-
                                         <td>
 
 
-                                            <div class="task-title-cell">
+                                            <div class="project-name">
 
 
-                                                <strong>
-
-                                                    <?= htmlspecialchars(
-                                                        $task["title"]
-                                                    ) ?>
-
-                                                </strong>
-
-
-                                                <small>
+                                                <div class="project-avatar">
 
                                                     <?= htmlspecialchars(
-                                                        $task["description"]
-                                                        ?: "No description"
+                                                        strtoupper(
+                                                            substr(
+                                                                $task["title"],
+                                                                0,
+                                                                1
+                                                            )
+                                                        )
                                                     ) ?>
 
-                                                </small>
+                                                </div>
+
+
+                                                <div>
+
+
+                                                    <strong>
+
+                                                        <?= htmlspecialchars(
+                                                            $task["title"]
+                                                        ) ?>
+
+                                                    </strong>
+
+
+                                                    <?php if (!empty($task["description"])): ?>
+
+                                                        <span>
+
+                                                            <?= htmlspecialchars(
+                                                                $task["description"]
+                                                            ) ?>
+
+                                                        </span>
+
+                                                    <?php endif; ?>
+
+
+                                                </div>
 
 
                                             </div>
@@ -1527,93 +881,37 @@ $filtered_task_count = count($tasks);
 
                                         <!-- PROJECT -->
 
-
                                         <td>
 
-
-                                            <span class="task-project-name">
+                                            <strong>
 
                                                 <?= htmlspecialchars(
                                                     $task["project_name"]
                                                 ) ?>
 
-                                            </span>
-
+                                            </strong>
 
                                         </td>
 
 
 
-                                        <!-- ASSIGNEE -->
-
+                                        <!-- MEMBER -->
 
                                         <td>
 
+                                            <?php if (!empty($task["member_name"])): ?>
 
-                                            <?php if (
-                                                !empty(
-                                                    $task["assignee_name"]
-                                                )
-                                            ): ?>
-
-
-                                                <div class="task-assignee">
-
-
-                                                    <div
-                                                        class="task-assignee-avatar"
-                                                    >
-
-                                                        <?= htmlspecialchars(
-                                                            strtoupper(
-                                                                substr(
-                                                                    $task["assignee_name"],
-                                                                    0,
-                                                                    2
-                                                                )
-                                                            )
-                                                        ) ?>
-
-                                                    </div>
-
-
-                                                    <div class="task-assignee-info">
-
-
-                                                        <strong>
-
-                                                            <?= htmlspecialchars(
-                                                                $task["assignee_name"]
-                                                            ) ?>
-
-                                                        </strong>
-
-
-                                                        <small>
-
-                                                            <?= htmlspecialchars(
-                                                                $task["assignee_email"]
-                                                            ) ?>
-
-                                                        </small>
-
-
-                                                    </div>
-
-
-                                                </div>
-
+                                                <?= htmlspecialchars(
+                                                    $task["member_name"]
+                                                ) ?>
 
                                             <?php else: ?>
-
 
                                                 <span>
                                                     Unassigned
                                                 </span>
 
-
                                             <?php endif; ?>
-
 
                                         </td>
 
@@ -1621,31 +919,44 @@ $filtered_task_count = count($tasks);
 
                                         <!-- DUE DATE -->
 
-
                                         <td>
 
 
-                                            <?php if (
-                                                !empty(
-                                                    $task["due_date"]
-                                                )
-                                            ): ?>
+                                            <?php if (!empty($task["due_date"])): ?>
 
 
-                                                <?= htmlspecialchars(
-                                                    date(
-                                                        "M d, Y",
-                                                        strtotime(
-                                                            $task["due_date"]
+                                                <span
+                                                    class="<?= $is_overdue ? 'task-overdue' : '' ?>"
+                                                >
+
+                                                    <?= htmlspecialchars(
+                                                        date(
+                                                            "M d, Y",
+                                                            strtotime(
+                                                                $task["due_date"]
+                                                            )
                                                         )
-                                                    )
-                                                ) ?>
+                                                    ) ?>
+
+
+                                                    <?php if ($is_overdue): ?>
+
+                                                        <small>
+                                                            Overdue
+                                                        </small>
+
+                                                    <?php endif; ?>
+
+
+                                                </span>
 
 
                                             <?php else: ?>
 
 
-                                                —
+                                                <span>
+                                                    No deadline
+                                                </span>
 
 
                                             <?php endif; ?>
@@ -1657,19 +968,18 @@ $filtered_task_count = count($tasks);
 
                                         <!-- PRIORITY -->
 
-
                                         <td>
 
 
                                             <span
                                                 class="priority-badge priority-<?= htmlspecialchars(
-                                                    $task["priority"]
+                                                    $priority
                                                 ) ?>"
                                             >
 
                                                 <?= htmlspecialchars(
                                                     ucfirst(
-                                                        $task["priority"]
+                                                        $priority
                                                     )
                                                 ) ?>
 
@@ -1682,13 +992,12 @@ $filtered_task_count = count($tasks);
 
                                         <!-- STATUS -->
 
-
                                         <td>
 
 
                                             <span
                                                 class="status-badge status-<?= htmlspecialchars(
-                                                    $task["status"]
+                                                    $status
                                                 ) ?>"
                                             >
 
@@ -1697,7 +1006,7 @@ $filtered_task_count = count($tasks);
                                                         str_replace(
                                                             "_",
                                                             " ",
-                                                            $task["status"]
+                                                            $status
                                                         )
                                                     )
                                                 ) ?>
@@ -1711,21 +1020,18 @@ $filtered_task_count = count($tasks);
 
                                         <!-- ACTION -->
 
-
                                         <td>
 
 
-                                            <button
-                                                type="button"
-                                                class="task-action-button"
-                                                onclick="viewTask(
-                                                    <?= (int) $task["id"] ?>
-                                                )"
+                                            <a
+                                                href="manager-task-details.php?id=<?= (int) $task["id"] ?>"
+                                                class="table-action"
+                                                title="View Task"
                                             >
 
-                                                ⋮
+                                                →
 
-                                            </button>
+                                            </a>
 
 
                                         </td>
@@ -1749,7 +1055,9 @@ $filtered_task_count = count($tasks);
                 <?php else: ?>
 
 
-                    <div class="task-empty">
+                    <!-- EMPTY STATE -->
+
+                    <div class="empty-state">
 
 
                         <div class="empty-icon">
@@ -1758,47 +1066,13 @@ $filtered_task_count = count($tasks);
 
 
                         <h3>
-                            No Tasks Found
+                            No Tasks Yet
                         </h3>
 
 
-                        <?php if (
-                            $search !== "" ||
-                            $status_filter !== "all" ||
-                            $priority_filter !== "all"
-                        ): ?>
-
-
-                            <p>
-                                No tasks match your current filters.
-                            </p>
-
-
-                            <a
-                                href="manager-tasks.php"
-                                class="secondary-button"
-                            >
-                                Clear Filters
-                            </a>
-
-
-                        <?php else: ?>
-
-
-                            <p>
-                                No tasks have been created for your projects yet.
-                            </p>
-
-
-                            <a
-                                href="manager-create-task.php"
-                                class="primary-button"
-                            >
-                                + Create Your First Task
-                            </a>
-
-
-                        <?php endif; ?>
+                        <p>
+                            There are currently no tasks assigned to your projects.
+                        </p>
 
 
                     </div>
@@ -1808,6 +1082,52 @@ $filtered_task_count = count($tasks);
 
 
             </div>
+
+
+
+            <!-- =================================================
+                 OVERDUE NOTICE
+            ================================================== -->
+
+            <?php if ($overdue_tasks > 0): ?>
+
+
+                <div class="dashboard-card">
+
+
+                    <div class="card-header">
+
+
+                        <div>
+
+
+                            <h2>
+                                Attention Required
+                            </h2>
+
+
+                            <p>
+
+                                You have
+                                <strong>
+                                    <?= $overdue_tasks ?>
+                                </strong>
+
+                                overdue task<?= $overdue_tasks != 1 ? "s" : "" ?>.
+
+                            </p>
+
+
+                        </div>
+
+
+                    </div>
+
+
+                </div>
+
+
+            <?php endif; ?>
 
 
         </section>
@@ -1820,68 +1140,120 @@ $filtered_task_count = count($tasks);
 
 
 
+<!-- =====================================================
+     JAVASCRIPT
+====================================================== -->
+
 <script>
 
+
 /*
 |--------------------------------------------------------------------------
-| QUICK SEARCH
+| TASK SEARCH + FILTER
 |--------------------------------------------------------------------------
-|
-| This searches the tasks already displayed on the page.
-|
 */
 
-const quickSearch =
-    document.getElementById(
-        "quickTaskSearch"
-    );
+const searchInput =
+    document.getElementById("taskSearch");
+
+const statusFilter =
+    document.getElementById("statusFilter");
+
+const priorityFilter =
+    document.getElementById("priorityFilter");
 
 
-if (quickSearch) {
-
-    quickSearch.addEventListener(
-        "input",
-        function () {
-
-            const value =
-                this.value
-                    .toLowerCase()
-                    .trim();
+function filterTasks() {
 
 
-            const rows =
-                document.querySelectorAll(
-                    ".task-row"
-                );
+    const search =
+        searchInput
+            ? searchInput.value
+                .toLowerCase()
+                .trim()
+            : "";
 
 
-            rows.forEach(
-                function (row) {
-
-                    const text =
-                        row
-                            .getAttribute(
-                                "data-search"
-                            )
-                            .toLowerCase();
+    const selectedStatus =
+        statusFilter
+            ? statusFilter.value
+            : "";
 
 
-                    if (
-                        text.includes(value)
-                    ) {
+    const selectedPriority =
+        priorityFilter
+            ? priorityFilter.value
+            : "";
 
-                        row.style.display = "";
 
-                    } else {
+    const rows =
+        document.querySelectorAll(
+            ".task-row"
+        );
 
-                        row.style.display = "none";
 
-                    }
+    rows.forEach(function(row) {
 
-                }
-            );
+
+        const rowText =
+            row.textContent
+                .toLowerCase();
+
+
+        const rowStatus =
+            row.dataset.status;
+
+
+        const rowPriority =
+            row.dataset.priority;
+
+
+        const matchesSearch =
+            rowText.includes(search);
+
+
+        const matchesStatus =
+            selectedStatus === "" ||
+            rowStatus === selectedStatus;
+
+
+        const matchesPriority =
+            selectedPriority === "" ||
+            rowPriority === selectedPriority;
+
+
+        if (
+            matchesSearch &&
+            matchesStatus &&
+            matchesPriority
+        ) {
+
+            row.style.display = "";
+
+        } else {
+
+            row.style.display = "none";
 
         }
+
+
+    });
+
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| SEARCH EVENT
+|--------------------------------------------------------------------------
+*/
+
+if (searchInput) {
+
+    searchInput.addEventListener(
+        "input",
+        filterTasks
     );
 
 }
@@ -1889,17 +1261,35 @@ if (quickSearch) {
 
 /*
 |--------------------------------------------------------------------------
-| VIEW TASK
+| STATUS FILTER
 |--------------------------------------------------------------------------
 */
 
-function viewTask(id) {
+if (statusFilter) {
 
-    window.location.href =
-        "manager-task-details.php?id="
-        + id;
+    statusFilter.addEventListener(
+        "change",
+        filterTasks
+    );
 
 }
+
+
+/*
+|--------------------------------------------------------------------------
+| PRIORITY FILTER
+|--------------------------------------------------------------------------
+*/
+
+if (priorityFilter) {
+
+    priorityFilter.addEventListener(
+        "change",
+        filterTasks
+    );
+
+}
+
 
 </script>
 
