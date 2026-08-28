@@ -36,6 +36,7 @@ if (
 
 
 $manager_id = (int) $_SESSION["user_id"];
+$manager_name = $_SESSION["full_name"] ?? "Project Manager";
 
 $error = "";
 

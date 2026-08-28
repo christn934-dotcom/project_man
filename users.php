@@ -85,7 +85,11 @@ foreach ($users as $user) {
 
     if ($user["status"] === "active") {
         $active_count++;
-        /*
+    }
+
+}
+
+/*
 |--------------------------------------------------------------------------
 | ACTION MESSAGES
 |--------------------------------------------------------------------------
@@ -152,9 +156,6 @@ if (isset($_GET["error"])) {
                 "An unexpected error occurred.";
             break;
 
-    }
-
-}
     }
 
 }

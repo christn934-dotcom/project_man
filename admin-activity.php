@@ -1,0 +1,230 @@
+<?php
+
+session_start();
+
+require_once "config/database.php";
+
+
+/*|--------------------------------------------------------------------------| Admin Protection|--------------------------------------------------------------------------|*/
+
+if (!isset($_SESSION["user_id"])) {
+    header("Location: login.php");
+    exit;
+}
+
+if (!isset($_SESSION["role"]) || $_SESSION["role"] !== "admin") {
+    header("Location: dashboard.php");
+    exit;
+}
+
+
+$admin_name = $_SESSION["full_name"] ?? "Administrator";
+
+
+/*|--------------------------------------------------------------------------| GET ACTIVITY LOGS|--------------------------------------------------------------------------|*/
+
+$activities = [];
+
+$query = "
+    SELECT
+        a.id,
+        a.action,
+        a.description,
+        a.created_at,
+        u.full_name,
+        p.name AS project_name
+    FROM activity_logs a
+    INNER JOIN users u ON a.user_id = u.id
+    LEFT JOIN projects p ON a.project_id = p.id
+    ORDER BY a.created_at DESC
+    LIMIT 50
+";
+
+$result = mysqli_query($conn, $query);
+
+if ($result) {
+    while ($row = mysqli_fetch_assoc($result)) {
+        $activities[] = $row;
+    }
+}
+
+
+/*|--------------------------------------------------------------------------| ACTION ICONS|--------------------------------------------------------------------------|*/
+
+function activity_icon($action) {
+    $icons = [
+        "project_created" => "▣",
+        "project_updated" => "✎",
+        "project_deleted" => "✕",
+        "task_created"    => "✓",
+        "task_updated"    => "✎",
+        "task_deleted"    => "✕",
+        "user_created"    => "♙",
+        "user_updated"    => "✎",
+        "user_deleted"    => "✕",
+    ];
+    return $icons[$action] ?? "•";
+}
+
+
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activity Logs | PMS</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+    <style>
+        .activity-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .activity-full-list {
+            display: flex;
+            flex-direction: column;
+        }
+        .activity-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            padding: 18px 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .activity-row:last-child {
+            border-bottom: none;
+        }
+        .activity-row-icon {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            background: #eef2ff;
+            color: #4f46e5;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+        .activity-row-content {
+            flex: 1;
+        }
+        .activity-row-content strong {
+            display: block;
+            margin-bottom: 3px;
+        }
+        .activity-row-content p {
+            color: #6b7280;
+            font-size: 13px;
+            margin: 0 0 4px;
+        }
+        .activity-row-content small {
+            color: #9ca3af;
+            font-size: 11px;
+        }
+        .activity-action-badge {
+            display: inline-flex;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 600;
+            background: #f3f4f6;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="admin-layout">
+
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-icon">P</div>
+            <div><h2>PMS</h2><span>Project Management</span></div>
+        </div>
+        <nav class="sidebar-nav">
+            <p class="nav-title">MAIN</p>
+            <a href="admin-dashboard.php" class="nav-item"><span class="nav-icon">▦</span> Dashboard</a>
+            <a href="admin-users.php" class="nav-item"><span class="nav-icon">♙</span> Users</a>
+            <a href="admin-projects.php" class="nav-item"><span class="nav-icon">▣</span> Projects</a>
+            <p class="nav-title">MANAGEMENT</p>
+            <a href="admin-reports.php" class="nav-item"><span class="nav-icon">▥</span> Reports</a>
+            <a href="admin-activity.php" class="nav-item active"><span class="nav-icon">◷</span> Activity Logs</a>
+            <p class="nav-title">ACCOUNT</p>
+            <a href="profile.php" class="nav-item"><span class="nav-icon">◉</span> My Profile</a>
+        </nav>
+        <div class="sidebar-bottom">
+            <a href="logout.php" class="logout-item"><span>↪</span> Logout</a>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <header class="topbar">
+            <div class="topbar-left">
+                <button class="mobile-menu" type="button">☰</button>
+                <div class="search-box"><span>⌕</span><input type="text" placeholder="Search..."></div>
+            </div>
+            <div class="topbar-right">
+                <div class="admin-profile">
+                    <div class="profile-avatar"><?= htmlspecialchars(strtoupper(substr($admin_name, 0, 2))) ?></div>
+                    <div class="profile-info"><strong><?= htmlspecialchars($admin_name) ?></strong><span>Administrator</span></div>
+                    <span class="profile-arrow">▾</span>
+                </div>
+            </div>
+        </header>
+
+        <section class="dashboard-content">
+
+            <div class="page-header">
+                <div>
+                    <span class="page-label">ACTIVITY</span>
+                    <h1>Activity Logs</h1>
+                    <p>Recent activity across the system.</p>
+                </div>
+            </div>
+
+            <div class="dashboard-card">
+                <div class="card-header">
+                    <div>
+                        <h2>Recent Activity</h2>
+                        <p><?= count($activities) ?> recorded event(s)</p>
+                    </div>
+                </div>
+
+                <?php if (!empty($activities)): ?>
+                    <div class="activity-full-list">
+                        <?php foreach ($activities as $activity): ?>
+                            <div class="activity-row">
+                                <div class="activity-row-icon"><?= activity_icon($activity["action"]) ?></div>
+                                <div class="activity-row-content">
+                                    <strong><?= htmlspecialchars($activity["full_name"]) ?></strong>
+                                    <span class="activity-action-badge"><?= htmlspecialchars(str_replace("_", " ", $activity["action"])) ?></span>
+                                    <p><?= htmlspecialchars($activity["description"]) ?></p>
+                                    <?php if (!empty($activity["project_name"])): ?>
+                                        <small>Project: <?= htmlspecialchars($activity["project_name"]) ?></small><br>
+                                    <?php endif; ?>
+                                    <small><?= htmlspecialchars($activity["created_at"]) ?></small>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php else: ?>
+                    <div class="empty-state">
+                        <div class="empty-icon">◷</div>
+                        <h3>No Activity Yet</h3>
+                        <p>Activity will be recorded as actions occur in the system.</p>
+                    </div>
+                <?php endif; ?>
+            </div>
+
+        </section>
+    </main>
+
+</div>
+
+</body>
+</html>
