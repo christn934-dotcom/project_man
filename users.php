@@ -11,10 +11,7 @@ require_once "config/database.php";
 |--------------------------------------------------------------------------
 */
 
-if (!isset($_SESSION["user_id"])) {
-    header("Location: login.php");
-    exit;
-}
+require_once "auth_check.php";
 
 if (
     !isset($_SESSION["role"]) ||
@@ -410,6 +407,9 @@ if (isset($_GET["error"])) {
 
 
 <body>
+<script>
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+</script>
 
 
 <div class="admin-layout">
@@ -480,7 +480,7 @@ if (isset($_GET["error"])) {
 
 
             <a
-                href="#"
+                href="tasks.php"
                 class="nav-item"
             >
 
@@ -540,13 +540,21 @@ if (isset($_GET["error"])) {
             </a>
 
 
+                        <a
+                href="notifications.php"
+                class="nav-item"
+            >
+                <span class="nav-icon">♧</span>
+                Notifications
+            </a>
+
             <p class="nav-title">
                 SYSTEM
             </p>
 
 
             <a
-                href="#"
+                href="settings.php"
                 class="nav-item"
             >
 
@@ -577,7 +585,11 @@ if (isset($_GET["error"])) {
 
 
         <div class="sidebar-bottom">
-
+            <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                <span class="toggle-icon">🌙</span>
+                <span>Dark Mode</span>
+                <span class="toggle-track"></span>
+            </button>
             <a
                 href="logout.php"
                 class="logout-item"
@@ -645,11 +657,22 @@ if (isset($_GET["error"])) {
             <div class="topbar-right">
 
 
-                <button
+                                <button
+                    class="theme-toggle-btn"
+                    onclick="toggleTheme()"
+                    title="Toggle Theme"
+                >
+                    <span class="theme-icon-light">☀️</span>
+                    <span class="theme-icon-dark">🌙</span>
+                </button>
+<button
                     class="notification-button"
                     type="button"
+                    onclick="window.location.href='notifications.php'"
+                    style="position:relative;"
                 >
-                    ♧
+                    🔔
+                    <span class="notification-dot" id="notifBadge" style="display:none;"></span>
                 </button>
 
 
@@ -1162,27 +1185,17 @@ if (isset($_GET["error"])) {
                                                     <?php if (
                                                         $user["id"]
                                                         != $_SESSION["user_id"]
-                                                    ): ?>
-
-
-                                                        <!-- CHANGE STATUS -->
-
-                                                        <a
-                                                            href="toggle-user.php?id=<?= (int) $user['id'] ?>"
-                                                            onclick="return confirm('Change the status of this user?')"
-                                                        >
-
-                                                            <?= $user["status"] === "active"
-                                                                ? "Deactivate"
-                                                                : "Activate"
-                                                            ?>
-
-                                                        </a>
+                                                    ): ?>                                                        <!-- CHANGE STATUS -->
+                                                        <form method="POST" action="toggle-user.php" style="display:inline;">
+                                                            <input type="hidden" name="id" value="<?= (int) $user['id'] ?>">
+                                                            <button type="submit" class="danger-action" onclick="return confirm('Change the status of this user?')" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font:inherit;">
+                                                                <?= $user["status"] === "active" ? "Deactivate" : "Activate" ?>
+                                                            </button>
+                                                        </form>
 
 
 
                                                         <!-- EDIT -->
-
                                                         <a
                                                             href="edit-user.php?id=<?= (int) $user['id'] ?>"
                                                         >
@@ -1192,14 +1205,12 @@ if (isset($_GET["error"])) {
 
 
                                                         <!-- DELETE -->
-
-                                                        <a
-                                                            href="delete-user.php?id=<?= (int) $user['id'] ?>"
-                                                            class="danger-action"
-                                                            onclick="return confirm('Are you sure you want to permanently delete this user?')"
-                                                        >
-                                                            Delete User
-                                                        </a>
+                                                        <form method="POST" action="delete-user.php" style="display:inline;">
+                                                            <input type="hidden" name="id" value="<?= (int) $user['id'] ?>">
+                                                            <button type="submit" class="danger-action" onclick="return confirm('Are you sure you want to permanently delete this user?')" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font:inherit;">
+                                                                Delete User
+                                                            </button>
+                                                        </form>
 
 
                                                     <?php else: ?>
@@ -1650,6 +1661,36 @@ document.addEventListener(
 </script>
 
 
+<?php include "cookie_consent.php"; ?>
+<script src="dark_mode.php"></script>
+<script src="assets/js/responsive.js"></script>
+
+<script>
+(function() {
+    fetch('notification_count.php')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var badge = document.getElementById('notifBadge');
+            if (badge && data.count > 0) {
+                badge.style.display = 'block';
+                badge.title = data.count + ' recent notifications';
+                // Show count as text if > 0
+                if (data.count > 99) {
+                    badge.textContent = '99+';
+                } else {
+                    badge.textContent = data.count;
+                }
+                badge.style.width = 'auto';
+                badge.style.height = 'auto';
+                badge.style.padding = '1px 5px';
+                badge.style.fontSize = '10px';
+                badge.style.borderRadius = '10px';
+                badge.style.fontWeight = '700';
+            }
+        })
+        .catch(function() {});
+})();
+</script>
 </body>
 
 </html>

@@ -406,6 +406,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 </div>
 
 
+<?php include "cookie_consent.php"; ?>
+<?php include "theme_toggle_floating.php"; ?>
+<script src="dark_mode.php"></script>
 </body>
 
 </html>

@@ -11,12 +11,8 @@ require_once "config/database.php";
 |--------------------------------------------------------------------------
 */
 
-if (!isset($_SESSION["user_id"])) {
-
-    header("Location: login.php");
-    exit;
-
-}
+require_once "auth_check.php";
+require_once "send_email_notification.php";
 
 if (
     !isset($_SESSION["role"]) ||
@@ -78,7 +74,8 @@ $created_by = (int)$_SESSION["user_id"];
 
 if ($name === "") {
 
-    die("Project name is required.");
+    header("Location: projects.php?error=" . urlencode("Project name is required."));
+    exit;
 
 }
 
@@ -91,7 +88,8 @@ if ($name === "") {
 
 if ($manager_id <= 0) {
 
-    die("Please select a Project Manager.");
+    header("Location: projects.php?error=" . urlencode("Please select a Project Manager."));
+    exit;
 
 }
 
@@ -104,7 +102,8 @@ if ($manager_id <= 0) {
 
 if ($start_date === "") {
 
-    die("Please select a start date.");
+    header("Location: projects.php?error=" . urlencode("Please select a start date."));
+    exit;
 
 }
 
@@ -130,7 +129,8 @@ if (
     )
 ) {
 
-    die("Invalid priority.");
+    header("Location: projects.php?error=" . urlencode("Invalid priority."));
+    exit;
 
 }
 
@@ -146,9 +146,8 @@ if (
     $end_date < $start_date
 ) {
 
-    die(
-        "End date cannot be before start date."
-    );
+    header("Location: projects.php?error=" . urlencode("End date cannot be before start date."));
+    exit;
 
 }
 
@@ -200,9 +199,8 @@ if (
         $manager_check
     );
 
-    die(
-        "The selected Project Manager is invalid."
-    );
+    header("Location: projects.php?error=" . urlencode("The selected Project Manager is invalid."));
+    exit;
 
 }
 
@@ -266,9 +264,8 @@ if (!empty($members)) {
                 $member_check
             );
 
-            die(
-                "One of the selected team members is invalid."
-            );
+            header("Location: projects.php?error=" . urlencode("One of the selected team members is invalid."));
+            exit;
 
         }
 
@@ -495,6 +492,21 @@ try {
 
     mysqli_stmt_close(
         $activity_query
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | EMAIL NOTIFICATION
+    |--------------------------------------------------------------------------
+    */
+
+    send_notification_email(
+        $conn,
+        "project_created",
+        $activity_description,
+        $project_id,
+        $created_by
     );
 
 

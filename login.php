@@ -94,6 +94,57 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                     /*
                     |--------------------------------------------------------------------------
+                    | REMEMBER ME
+                    |--------------------------------------------------------------------------
+                    */
+
+                    $remember = !empty($_POST["remember"]);
+
+                    if ($remember) {
+
+                        /* Check if cookie consent was given */
+                        $consent = $_COOKIE["cookie_consent"] ?? "";
+
+                        if ($consent === "accepted") {
+
+                            /* Delete any existing tokens for this user */
+                            $del = mysqli_prepare($conn, "DELETE FROM remember_me WHERE user_id = ?");
+                            mysqli_stmt_bind_param($del, "i", $user["id"]);
+                            mysqli_stmt_execute($del);
+                            mysqli_stmt_close($del);
+
+                            /* Generate secure token */
+                            $raw_token = bin2hex(random_bytes(32));
+                            $hashed_token = hash("sha256", $raw_token);
+
+                            /* Store hashed token in database */
+                            $insert = mysqli_prepare(
+                                $conn,
+                                "INSERT INTO remember_me (user_id, token, expires_at)
+                                 VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 14 DAY))"
+                            );
+                            mysqli_stmt_bind_param($insert, "is", $user["id"], $hashed_token);
+                            mysqli_stmt_execute($insert);
+                            mysqli_stmt_close($insert);
+
+                            /* Set cookie with raw token (14 days) */
+                            setcookie(
+                                "remember_me",
+                                $raw_token,
+                                time() + (14 * 24 * 60 * 60),
+                                "/",
+                                "",
+                                false,
+                                true  /* httpOnly */
+                            );
+
+                        }
+
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
                     | ROLE-BASED REDIRECTION
                     |--------------------------------------------------------------------------
                     */
@@ -348,6 +399,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 </div>
 
 
+<?php include "cookie_consent.php"; ?>
+<?php include "theme_toggle_floating.php"; ?>
+<script src="dark_mode.php"></script>
 </body>
 
 </html>

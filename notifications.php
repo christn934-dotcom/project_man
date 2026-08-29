@@ -7,14 +7,19 @@ require_once "config/database.php";
 
 /*|--------------------------------------------------------------------------| CHECK LOGIN|--------------------------------------------------------------------------|*/
 
-if (!isset($_SESSION["user_id"])) {
-    header("Location: login.php");
-    exit;
-}
+require_once "auth_check.php";
 
 
 $role = $_SESSION["role"] ?? "";
 $user_name = $_SESSION["full_name"] ?? "User";
+
+/* Mark notifications as read by updating last_seen_at */
+$upd_stmt = mysqli_prepare($conn, "UPDATE users SET last_seen_at = NOW() WHERE id = ? AND (last_seen_at IS NULL OR last_seen_at < DATE_SUB(NOW(), INTERVAL 10 SECOND))");
+if ($upd_stmt) {
+    mysqli_stmt_bind_param($upd_stmt, "i", $_SESSION["user_id"]);
+    mysqli_stmt_execute($upd_stmt);
+    mysqli_stmt_close($upd_stmt);
+}
 
 
 /*|--------------------------------------------------------------------------| GET ROLE-SPECIFIC SIDEBAR|--------------------------------------------------------------------------|*/
@@ -30,6 +35,7 @@ if ($role === "admin") {
     $section_management = [
         ["admin-reports.php",  "▥", "Reports",       false],
         ["admin-activity.php", "◷", "Activity Logs", false],
+        ["notifications.php",  "♧", "Notifications", false],
     ];
     $section_account = [
         ["profile.php", "◉", "My Profile", false],
@@ -43,8 +49,9 @@ if ($role === "admin") {
         ["manager-tasks.php",      "✓", "Tasks",       false],
     ];
     $section_management = [
-        ["manager-team.php",    "♙", "Team",    false],
-        ["manager-reports.php", "▥", "Reports", false],
+        ["manager-team.php",    "♙", "Team",          false],
+        ["manager-reports.php", "▥", "Reports",       false],
+        ["notifications.php",   "♧", "Notifications", false],
     ];
     $section_account = [
         ["profile.php", "◉", "My Profile", false],
@@ -61,6 +68,7 @@ if ($role === "admin") {
         ["team.php",            "♙", "Team",          false],
         ["notifications.php",   "♧", "Notifications", true],
     ];
+    $active_page = "notifications.php";
     $section_account = [
         ["profile.php", "◉", "My Profile", false],
     ];
@@ -167,9 +175,13 @@ function notif_icon($action) {
     $icons = [
         "project_created" => "▣",
         "project_updated" => "✎",
+        "project_deleted" => "✕",
         "task_created"    => "✓",
         "task_updated"    => "✎",
+        "task_deleted"    => "✕",
         "user_created"    => "♙",
+        "user_updated"    => "✎",
+        "user_deleted"    => "✕",
     ];
     return $icons[$action] ?? "•";
 }
@@ -196,6 +208,9 @@ function notif_icon($action) {
     </style>
 </head>
 <body>
+<script>
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+</script>
 
 <div class="admin-layout">
 
@@ -225,6 +240,11 @@ function notif_icon($action) {
             <?php endforeach; ?>
         </nav>
         <div class="sidebar-bottom">
+            <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                <span class="toggle-icon">🌙</span>
+                <span>Dark Mode</span>
+                <span class="toggle-track"></span>
+            </button>
             <a href="logout.php" class="logout-item"><span>↪</span> Logout</a>
         </div>
     </aside>
@@ -236,6 +256,24 @@ function notif_icon($action) {
                 <div class="search-box"><span>⌕</span><input type="text" placeholder="Search..."></div>
             </div>
             <div class="topbar-right">
+                                                <button
+                    class="theme-toggle-btn"
+                    onclick="toggleTheme()"
+                    title="Toggle Theme"
+                >
+                    <span class="theme-icon-light">☀️</span>
+                    <span class="theme-icon-dark">🌙</span>
+                </button>
+<button
+                    class="notification-button"
+                    type="button"
+                    onclick="window.location.href='notifications.php'"
+                    style="position:relative;"
+                >
+                    🔔
+                    <span class="notification-dot" id="notifBadge" style="display:none;"></span>
+                </button>
+
                 <div class="admin-profile">
                     <div class="profile-avatar"><?= htmlspecialchars(strtoupper(substr($user_name, 0, 2))) ?></div>
                     <div class="profile-info"><strong><?= htmlspecialchars($user_name) ?></strong><span><?= htmlspecialchars($role_label) ?></span></div>
@@ -281,7 +319,36 @@ function notif_icon($action) {
         </section>
     </main>
 
-</div>
+</div><?php include "cookie_consent.php"; ?>
+<script src="dark_mode.php"></script>
+<script src="assets/js/responsive.js"></script>
 
+<script>
+(function() {
+    fetch('notification_count.php')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var badge = document.getElementById('notifBadge');
+            if (badge && data.count > 0) {
+                badge.style.display = 'block';
+                badge.title = data.count + ' recent notifications';
+                // Show count as text if > 0
+                if (data.count > 99) {
+                    badge.textContent = '99+';
+                } else {
+                    badge.textContent = data.count;
+                }
+                badge.style.width = 'auto';
+                badge.style.height = 'auto';
+                badge.style.padding = '1px 5px';
+                badge.style.fontSize = '10px';
+                badge.style.borderRadius = '10px';
+                badge.style.fontWeight = '700';
+            }
+        })
+        .catch(function() {});
+})();
+</script>
 </body>
+
 </html>

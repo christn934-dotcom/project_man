@@ -11,10 +11,8 @@ require_once "config/database.php";
 |--------------------------------------------------------------------------
 */
 
-if (!isset($_SESSION["user_id"])) {
-    header("Location: login.php");
-    exit;
-}
+require_once "auth_check.php";
+require_once "send_email_notification.php";
 
 if (
     !isset($_SESSION["role"]) ||
@@ -31,8 +29,16 @@ if (
 |--------------------------------------------------------------------------
 */
 
-$user_id = isset($_GET["id"])
-    ? (int) $_GET["id"]
+/*|--------------------------------------------------------------------------| ONLY POST|--------------------------------------------------------------------------|*/
+
+if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+    header("Location: users.php");
+    exit;
+}
+
+
+$user_id = isset($_POST["id"])
+    ? (int) $_POST["id"]
     : 0;
 
 
@@ -153,6 +159,18 @@ mysqli_stmt_close($stmt);
 */
 
 if ($success) {
+
+    /* Activity log */
+    $actor_id = (int) $_SESSION["user_id"];
+    $new_status_label = $user["status"] === "active" ? "deactivated" : "activated";
+    $log_desc = "User " . $user["role"] . " " . $new_status_label;
+    $log_action = "user_updated";
+    $lstmt = mysqli_prepare($conn, "INSERT INTO activity_logs (user_id, action, description) VALUES (?, ?, ?)");
+    if ($lstmt) {
+        mysqli_stmt_bind_param($lstmt, "iss", $actor_id, $log_action, $log_desc);
+        mysqli_stmt_execute($lstmt);
+        mysqli_stmt_close($lstmt);
+    }
 
     header(
         "Location: users.php?status_changed=1"

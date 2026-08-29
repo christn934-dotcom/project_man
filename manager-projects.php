@@ -11,12 +11,19 @@ require_once "config/database.php";
 |--------------------------------------------------------------------------
 */
 
-if (!isset($_SESSION["user_id"])) {
+require_once "auth_check.php";
 
-    header("Location: login.php");
-    exit;
-
+/* Update last_seen_at for notification badge tracking */
+$__ls_uid = $_SESSION["user_id"] ?? 0;
+if ($__ls_uid > 0) {
+    $___ls = mysqli_prepare($conn, "UPDATE users SET last_seen_at = NOW() WHERE id = ?");
+    if ($___ls) {
+        mysqli_stmt_bind_param($___ls, "i", $__ls_uid);
+        mysqli_stmt_execute($___ls);
+        mysqli_stmt_close($___ls);
+    }
 }
+
 
 
 /*
@@ -178,6 +185,9 @@ $manager_initials = strtoupper(
 
 
 <body>
+<script>
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+</script>
 
 
 <div class="admin-layout">
@@ -319,6 +329,14 @@ $manager_initials = strtoupper(
 
             <!-- PROFILE -->
 
+                        <a
+                href="notifications.php"
+                class="nav-item"
+            >
+                <span class="nav-icon">♧</span>
+                Notifications
+            </a>
+
             <a
                 href="profile.php"
                 class="nav-item"
@@ -339,7 +357,11 @@ $manager_initials = strtoupper(
         <!-- LOGOUT -->
 
         <div class="sidebar-bottom">
-
+            <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                <span class="toggle-icon">🌙</span>
+                <span>Dark Mode</span>
+                <span class="toggle-track"></span>
+            </button>
             <a
                 href="logout.php"
                 class="logout-item"
@@ -415,11 +437,22 @@ $manager_initials = strtoupper(
 
                 <!-- NOTIFICATIONS -->
 
-                <button
+                                <button
+                    class="theme-toggle-btn"
+                    onclick="toggleTheme()"
+                    title="Toggle Theme"
+                >
+                    <span class="theme-icon-light">☀️</span>
+                    <span class="theme-icon-dark">🌙</span>
+                </button>
+<button
                     class="notification-button"
                     type="button"
+                    onclick="window.location.href='notifications.php'"
+                    style="position:relative;"
                 >
-                    ♧
+                    🔔
+                    <span class="notification-dot" id="notifBadge" style="display:none;"></span>
                 </button>
 
 
@@ -997,6 +1030,36 @@ function openProjectMenu(id) {
 </script>
 
 
+<?php include "cookie_consent.php"; ?>
+<script src="dark_mode.php"></script>
+<script src="assets/js/responsive.js"></script>
+
+<script>
+(function() {
+    fetch('notification_count.php')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var badge = document.getElementById('notifBadge');
+            if (badge && data.count > 0) {
+                badge.style.display = 'block';
+                badge.title = data.count + ' recent notifications';
+                // Show count as text if > 0
+                if (data.count > 99) {
+                    badge.textContent = '99+';
+                } else {
+                    badge.textContent = data.count;
+                }
+                badge.style.width = 'auto';
+                badge.style.height = 'auto';
+                badge.style.padding = '1px 5px';
+                badge.style.fontSize = '10px';
+                badge.style.borderRadius = '10px';
+                badge.style.fontWeight = '700';
+            }
+        })
+        .catch(function() {});
+})();
+</script>
 </body>
 
 </html>

@@ -11,10 +11,7 @@ require_once "config/database.php";
 |--------------------------------------------------------------------------
 */
 
-if (!isset($_SESSION["user_id"])) {
-    header("Location: login.php");
-    exit;
-}
+require_once "auth_check.php";
 
 if (
     !isset($_SESSION["role"]) ||
@@ -383,6 +380,9 @@ if ($search !== "") {
 
 
 <body>
+<script>
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+</script>
 
 
 <div class="admin-layout">
@@ -513,6 +513,14 @@ if ($search !== "") {
             </a>
 
 
+                        <a
+                href="notifications.php"
+                class="nav-item"
+            >
+                <span class="nav-icon">♧</span>
+                Notifications
+            </a>
+
             <p class="nav-title">
                 SYSTEM
             </p>
@@ -550,7 +558,11 @@ if ($search !== "") {
 
 
         <div class="sidebar-bottom">
-
+            <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                <span class="toggle-icon">🌙</span>
+                <span>Dark Mode</span>
+                <span class="toggle-track"></span>
+            </button>
             <a
                 href="logout.php"
                 class="logout-item"
@@ -633,11 +645,22 @@ if ($search !== "") {
             <div class="topbar-right">
 
 
-                <button
+                                <button
+                    class="theme-toggle-btn"
+                    onclick="toggleTheme()"
+                    title="Toggle Theme"
+                >
+                    <span class="theme-icon-light">☀️</span>
+                    <span class="theme-icon-dark">🌙</span>
+                </button>
+<button
                     class="notification-button"
                     type="button"
+                    onclick="window.location.href='notifications.php'"
+                    style="position:relative;"
                 >
-                    ♧
+                    🔔
+                    <span class="notification-dot" id="notifBadge" style="display:none;"></span>
                 </button>
 
 
@@ -1120,13 +1143,12 @@ if ($search !== "") {
                                                     </a>
 
 
-                                                    <a
-                                                        href="delete-project.php?id=<?= (int) $project["id"] ?>"
-                                                        class="delete-action"
-                                                        onclick="return confirm('Are you sure you want to delete this project? This action cannot be undone.')"
-                                                    >
-                                                        Delete Project
-                                                    </a>
+                                                    <form method="POST" action="delete-project.php" style="display:inline;">
+                                                        <input type="hidden" name="id" value="<?= (int) $project["id"] ?>">
+                                                        <button type="submit" class="delete-action" onclick="return confirm('Are you sure you want to delete this project? This action cannot be undone.')" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font:inherit;">
+                                                            Delete Project
+                                                        </button>
+                                                    </form>
 
 
                                                 </div>
@@ -1753,6 +1775,36 @@ document.addEventListener("click", function(event) {
 </script>
 
 
+<?php include "cookie_consent.php"; ?>
+<script src="dark_mode.php"></script>
+<script src="assets/js/responsive.js"></script>
+
+<script>
+(function() {
+    fetch('notification_count.php')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var badge = document.getElementById('notifBadge');
+            if (badge && data.count > 0) {
+                badge.style.display = 'block';
+                badge.title = data.count + ' recent notifications';
+                // Show count as text if > 0
+                if (data.count > 99) {
+                    badge.textContent = '99+';
+                } else {
+                    badge.textContent = data.count;
+                }
+                badge.style.width = 'auto';
+                badge.style.height = 'auto';
+                badge.style.padding = '1px 5px';
+                badge.style.fontSize = '10px';
+                badge.style.borderRadius = '10px';
+                badge.style.fontWeight = '700';
+            }
+        })
+        .catch(function() {});
+})();
+</script>
 </body>
 
 </html>

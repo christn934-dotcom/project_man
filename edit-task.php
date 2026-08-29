@@ -7,10 +7,8 @@ require_once "config/database.php";
 
 /*|--------------------------------------------------------------------------| CHECK LOGIN|--------------------------------------------------------------------------|*/
 
-if (!isset($_SESSION["user_id"])) {
-    header("Location: login.php");
-    exit;
-}
+require_once "auth_check.php";
+require_once "send_email_notification.php";
 
 
 /*|--------------------------------------------------------------------------| CHECK ROLE|--------------------------------------------------------------------------|*/
@@ -161,6 +159,27 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         if (mysqli_stmt_execute($stmt)) {
 
+            /* Activity log */
+            $log_desc = "Updated task: " . $title;
+            $log_action = "task_updated";
+            $actor_id = (int) $_SESSION["user_id"];
+            $lstmt = mysqli_prepare($conn, "INSERT INTO activity_logs (user_id, project_id, action, description) VALUES (?, ?, ?, ?)");
+            if ($lstmt) {
+                mysqli_stmt_bind_param($lstmt, "iiss", $actor_id, $project_id, $log_action, $log_desc);
+                mysqli_stmt_execute($lstmt);
+                mysqli_stmt_close($lstmt);
+            }
+
+            /* Email notification */
+            send_notification_email(
+                $conn,
+                $log_action,
+                $log_desc,
+                $project_id,
+                $actor_id,
+                $task_id
+            );
+
             $redirect = ($role === "admin") ? "tasks.php" : "manager-tasks.php";
             header("Location: $redirect?updated=1");
             exit;
@@ -177,7 +196,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 }
 
 
-$manager_name = $_SESSION["full_name"] ?? "Project Manager";
+$user_name = $_SESSION["full_name"] ?? ($role === "admin" ? "Administrator" : "Project Manager");
+$role_label = $role === "admin" ? "Administrator" : "Project Manager";
+$is_admin = ($role === "admin");
 
 ?>
 
@@ -190,6 +211,9 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
     <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
+<script>
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+</script>
 
 <div class="admin-layout">
 
@@ -201,28 +225,52 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
         </div>
         <nav class="sidebar-nav">
             <p class="nav-title">MAIN</p>
-            <a href="manager-dashboard.php" class="nav-item">
-                <span class="nav-icon">▦</span> Dashboard
-            </a>
-            <a href="manager-projects.php" class="nav-item">
-                <span class="nav-icon">▣</span> My Projects
-            </a>
-            <a href="manager-tasks.php" class="nav-item active">
-                <span class="nav-icon">✓</span> Tasks
-            </a>
-            <p class="nav-title">WORKSPACE</p>
-            <a href="manager-team.php" class="nav-item">
-                <span class="nav-icon">♙</span> Team
-            </a>
-            <a href="manager-reports.php" class="nav-item">
-                <span class="nav-icon">▥</span> Reports
-            </a>
+            <?php if ($is_admin): ?>
+                <a href="admin-dashboard.php" class="nav-item">
+                    <span class="nav-icon">▦</span> Dashboard
+                </a>
+                <a href="admin-projects.php" class="nav-item">
+                    <span class="nav-icon">▣</span> Projects
+                </a>
+                <a href="tasks.php" class="nav-item active">
+                    <span class="nav-icon">✓</span> Tasks
+                </a>
+                <p class="nav-title">MANAGEMENT</p>
+                <a href="admin-users.php" class="nav-item">
+                    <span class="nav-icon">♙</span> Users
+                </a>
+                <a href="admin-reports.php" class="nav-item">
+                    <span class="nav-icon">▥</span> Reports
+                </a>
+            <?php else: ?>
+                <a href="manager-dashboard.php" class="nav-item">
+                    <span class="nav-icon">▦</span> Dashboard
+                </a>
+                <a href="manager-projects.php" class="nav-item">
+                    <span class="nav-icon">▣</span> My Projects
+                </a>
+                <a href="manager-tasks.php" class="nav-item active">
+                    <span class="nav-icon">✓</span> Tasks
+                </a>
+                <p class="nav-title">WORKSPACE</p>
+                <a href="manager-team.php" class="nav-item">
+                    <span class="nav-icon">♙</span> Team
+                </a>
+                <a href="manager-reports.php" class="nav-item">
+                    <span class="nav-icon">▥</span> Reports
+                </a>
+            <?php endif; ?>
             <p class="nav-title">ACCOUNT</p>
             <a href="profile.php" class="nav-item">
                 <span class="nav-icon">◉</span> My Profile
             </a>
         </nav>
         <div class="sidebar-bottom">
+            <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                <span class="toggle-icon">🌙</span>
+                <span>Dark Mode</span>
+                <span class="toggle-track"></span>
+            </button>
             <a href="logout.php" class="logout-item">
                 <span>↪</span> Logout
             </a>
@@ -243,10 +291,10 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
             </div>
             <div class="topbar-right">
                 <div class="admin-profile">
-                    <div class="profile-avatar"><?= htmlspecialchars(strtoupper(substr($manager_name, 0, 2))) ?></div>
+                    <div class="profile-avatar"><?= htmlspecialchars(strtoupper(substr($user_name, 0, 2))) ?></div>
                     <div class="profile-info">
-                        <strong><?= htmlspecialchars($manager_name) ?></strong>
-                        <span>Project Manager</span>
+                        <strong><?= htmlspecialchars($user_name) ?></strong>
+                        <span><?= htmlspecialchars($role_label) ?></span>
                     </div>
                     <span class="profile-arrow">▾</span>
                 </div>
@@ -288,7 +336,7 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
                         <select name="project_id" required>
                             <option value="">Select Project</option>
                             <?php foreach ($projects as $project): ?>
-                                <option value="<?= (int)$project["id"] ?>" <?= ((int)$_POST["project_id"] ?? (int)$task["project_id"]) == (int)$project["id"] ? "selected" : "") ?>>
+                                <option value="<?= (int)$project["id"] ?>" <?= (((int)$_POST["project_id"] ?? (int)$task["project_id"]) == (int)$project["id"] ? "selected" : "") ?>>
                                     <?= htmlspecialchars($project["name"]) ?>
                                 </option>
                             <?php endforeach; ?>
@@ -349,7 +397,7 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
 
                     <!-- BUTTONS -->
                     <div class="modal-actions">
-                        <a href="tasks.php" class="secondary-button">Cancel</a>
+                        <a href="<?= $is_admin ? 'tasks.php' : 'manager-tasks.php' ?>" class="secondary-button">Cancel</a>
                         <button type="submit" class="primary-button">Save Changes</button>
                     </div>
 
@@ -361,7 +409,9 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
 
     </main>
 
-</div>
-
+</div><?php include "cookie_consent.php"; ?>
+<script src="dark_mode.php"></script>
+<script src="assets/js/responsive.js"></script>
 </body>
+
 </html>

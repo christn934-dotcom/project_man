@@ -7,10 +7,8 @@ require_once "config/database.php";
 
 /*|--------------------------------------------------------------------------| CHECK LOGIN|--------------------------------------------------------------------------|*/
 
-if (!isset($_SESSION["user_id"])) {
-    header("Location: login.php");
-    exit;
-}
+require_once "auth_check.php";
+require_once "send_email_notification.php";
 
 
 /*|--------------------------------------------------------------------------| CHECK ROLE|--------------------------------------------------------------------------|*/
@@ -28,7 +26,15 @@ $user_id = (int) $_SESSION["user_id"];
 
 /*|--------------------------------------------------------------------------| GET TASK ID|--------------------------------------------------------------------------|*/
 
-$task_id = isset($_GET["id"]) ? (int) $_GET["id"] : 0;
+/*|--------------------------------------------------------------------------| ONLY POST|--------------------------------------------------------------------------|*/
+
+if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+    header("Location: tasks.php");
+    exit;
+}
+
+
+$task_id = isset($_POST["id"]) ? (int) $_POST["id"] : 0;
 
 if ($task_id <= 0) {
     header("Location: tasks.php");
@@ -38,7 +44,7 @@ if ($task_id <= 0) {
 
 /*|--------------------------------------------------------------------------| GET TASK|--------------------------------------------------------------------------|*/
 
-$query = "SELECT t.id, p.manager_id
+$query = "SELECT t.id, t.title, t.project_id, p.manager_id
     FROM tasks t
     INNER JOIN projects p ON t.project_id = p.id
     WHERE t.id = ?
@@ -72,6 +78,17 @@ mysqli_stmt_bind_param($del, "i", $task_id);
 $success = mysqli_stmt_execute($del);
 mysqli_stmt_close($del);
 
+
+/* Activity log */
+$log_desc = "Deleted task: " . ($task["title"] ?? "Unknown");
+$log_action = "task_deleted";
+$task_project_id = (int) ($task["project_id"] ?? 0);
+$lstmt = mysqli_prepare($conn, "INSERT INTO activity_logs (user_id, project_id, action, description) VALUES (?, ?, ?, ?)");
+if ($lstmt) {
+    mysqli_stmt_bind_param($lstmt, "iiss", $user_id, $task_project_id, $log_action, $log_desc);
+    mysqli_stmt_execute($lstmt);
+    mysqli_stmt_close($lstmt);
+}
 
 $redirect = ($role === "admin") ? "tasks.php" : "manager-tasks.php";
 

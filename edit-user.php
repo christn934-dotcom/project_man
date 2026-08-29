@@ -11,10 +11,8 @@ require_once "config/database.php";
 |--------------------------------------------------------------------------
 */
 
-if (!isset($_SESSION["user_id"])) {
-    header("Location: login.php");
-    exit;
-}
+require_once "auth_check.php";
+require_once "send_email_notification.php";
 
 if (
     !isset($_SESSION["role"]) ||
@@ -257,6 +255,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         if ($success) {
 
+            /* Activity log */
+            $actor_id = (int) $_SESSION["user_id"];
+            $log_desc = "Updated user: " . $full_name . " (" . $email . ")";
+            $log_action = "user_updated";
+            $lstmt = mysqli_prepare($conn, "INSERT INTO activity_logs (user_id, action, description) VALUES (?, ?, ?)");
+            if ($lstmt) {
+                mysqli_stmt_bind_param($lstmt, "iss", $actor_id, $log_action, $log_desc);
+                mysqli_stmt_execute($lstmt);
+                mysqli_stmt_close($lstmt);
+            }
+
             header(
                 "Location: users.php?updated=1"
             );
@@ -417,6 +426,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
 <body>
+<script>
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+</script>
 
 
 <div class="admin-layout">
@@ -477,7 +489,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
             <a
-                href="#"
+                href="tasks.php"
                 class="nav-item"
             >
                 <span class="nav-icon">✓</span>
@@ -517,13 +529,21 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             </a>
 
 
+                        <a
+                href="notifications.php"
+                class="nav-item"
+            >
+                <span class="nav-icon">♧</span>
+                Notifications
+            </a>
+
             <p class="nav-title">
                 SYSTEM
             </p>
 
 
             <a
-                href="#"
+                href="settings.php"
                 class="nav-item"
             >
                 <span class="nav-icon">⚙</span>
@@ -544,7 +564,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
         <div class="sidebar-bottom">
-
+            <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                <span class="toggle-icon">🌙</span>
+                <span>Dark Mode</span>
+                <span class="toggle-track"></span>
+            </button>
             <a
                 href="logout.php"
                 class="logout-item"
@@ -598,11 +622,22 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             <div class="topbar-right">
 
 
-                <button
+                                <button
+                    class="theme-toggle-btn"
+                    onclick="toggleTheme()"
+                    title="Toggle Theme"
+                >
+                    <span class="theme-icon-light">☀️</span>
+                    <span class="theme-icon-dark">🌙</span>
+                </button>
+<button
                     class="notification-button"
                     type="button"
+                    onclick="window.location.href='notifications.php'"
+                    style="position:relative;"
                 >
-                    ♧
+                    🔔
+                    <span class="notification-dot" id="notifBadge" style="display:none;"></span>
                 </button>
 
 
@@ -935,6 +970,36 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 </div>
 
 
+<?php include "cookie_consent.php"; ?>
+<script src="dark_mode.php"></script>
+<script src="assets/js/responsive.js"></script>
+
+<script>
+(function() {
+    fetch('notification_count.php')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var badge = document.getElementById('notifBadge');
+            if (badge && data.count > 0) {
+                badge.style.display = 'block';
+                badge.title = data.count + ' recent notifications';
+                // Show count as text if > 0
+                if (data.count > 99) {
+                    badge.textContent = '99+';
+                } else {
+                    badge.textContent = data.count;
+                }
+                badge.style.width = 'auto';
+                badge.style.height = 'auto';
+                badge.style.padding = '1px 5px';
+                badge.style.fontSize = '10px';
+                badge.style.borderRadius = '10px';
+                badge.style.fontWeight = '700';
+            }
+        })
+        .catch(function() {});
+})();
+</script>
 </body>
 
 </html>

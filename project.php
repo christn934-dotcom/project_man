@@ -7,10 +7,7 @@ require_once "config/database.php";
 
 /*|--------------------------------------------------------------------------| CHECK LOGIN|--------------------------------------------------------------------------|*/
 
-if (!isset($_SESSION["user_id"])) {
-    header("Location: login.php");
-    exit;
-}
+require_once "auth_check.php";
 
 
 $role = $_SESSION["role"] ?? "";
@@ -221,6 +218,9 @@ if ($role === "admin") {
     </style>
 </head>
 <body>
+<script>
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+</script>
 
 <div class="admin-layout">
 
@@ -232,10 +232,24 @@ if ($role === "admin") {
         <nav class="sidebar-nav">
             <p class="nav-title">MAIN</p>
             <a href="<?= $home_link ?>" class="nav-item"><span class="nav-icon">▦</span> Dashboard</a>
-            <p class="nav-title">ACCOUNT</p>
+                        <a
+                href="notifications.php"
+                class="nav-item"
+            >
+                <span class="nav-icon">♧</span>
+                Notifications
+            </a>
+
+            <p class="nav-title">
+                ACCOUNT</p>
             <a href="profile.php" class="nav-item"><span class="nav-icon">◉</span> My Profile</a>
         </nav>
         <div class="sidebar-bottom">
+            <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                <span class="toggle-icon">🌙</span>
+                <span>Dark Mode</span>
+                <span class="toggle-track"></span>
+            </button>
             <a href="logout.php" class="logout-item"><span>↪</span> Logout</a>
         </div>
     </aside>
@@ -247,6 +261,24 @@ if ($role === "admin") {
                 <div class="search-box"><span>⌕</span><input type="text" placeholder="Search..."></div>
             </div>
             <div class="topbar-right">
+                                                <button
+                    class="theme-toggle-btn"
+                    onclick="toggleTheme()"
+                    title="Toggle Theme"
+                >
+                    <span class="theme-icon-light">☀️</span>
+                    <span class="theme-icon-dark">🌙</span>
+                </button>
+<button
+                    class="notification-button"
+                    type="button"
+                    onclick="window.location.href='notifications.php'"
+                    style="position:relative;"
+                >
+                    🔔
+                    <span class="notification-dot" id="notifBadge" style="display:none;"></span>
+                </button>
+
                 <div class="admin-profile">
                     <div class="profile-avatar"><?= htmlspecialchars(strtoupper(substr($user_name, 0, 2))) ?></div>
                     <div class="profile-info"><strong><?= htmlspecialchars($user_name) ?></strong><span><?= htmlspecialchars($role_label) ?></span></div>
@@ -336,7 +368,36 @@ if ($role === "admin") {
         </section>
     </main>
 
-</div>
+</div><?php include "cookie_consent.php"; ?>
+<script src="dark_mode.php"></script>
+<script src="assets/js/responsive.js"></script>
 
+<script>
+(function() {
+    fetch('notification_count.php')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var badge = document.getElementById('notifBadge');
+            if (badge && data.count > 0) {
+                badge.style.display = 'block';
+                badge.title = data.count + ' recent notifications';
+                // Show count as text if > 0
+                if (data.count > 99) {
+                    badge.textContent = '99+';
+                } else {
+                    badge.textContent = data.count;
+                }
+                badge.style.width = 'auto';
+                badge.style.height = 'auto';
+                badge.style.padding = '1px 5px';
+                badge.style.fontSize = '10px';
+                badge.style.borderRadius = '10px';
+                badge.style.fontWeight = '700';
+            }
+        })
+        .catch(function() {});
+})();
+</script>
 </body>
+
 </html>

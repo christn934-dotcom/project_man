@@ -11,10 +11,19 @@ require_once "config/database.php";
 |--------------------------------------------------------------------------
 */
 
-if (!isset($_SESSION["user_id"])) {
-    header("Location: login.php");
-    exit;
+require_once "auth_check.php";
+
+/* Update last_seen_at for notification badge tracking */
+$__ls_uid = $_SESSION["user_id"] ?? 0;
+if ($__ls_uid > 0) {
+    $___ls = mysqli_prepare($conn, "UPDATE users SET last_seen_at = NOW() WHERE id = ?");
+    if ($___ls) {
+        mysqli_stmt_bind_param($___ls, "i", $__ls_uid);
+        mysqli_stmt_execute($___ls);
+        mysqli_stmt_close($___ls);
+    }
 }
+
 
 if (
     !isset($_SESSION["role"]) ||
@@ -187,6 +196,9 @@ $admin_name = $_SESSION["full_name"] ?? "Administrator";
 
 
 <body>
+<script>
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+</script>
 
 
 <div class="admin-layout">
@@ -283,6 +295,14 @@ $admin_name = $_SESSION["full_name"] ?? "Administrator";
             </a>
 
 
+                        <a
+                href="notifications.php"
+                class="nav-item"
+            >
+                <span class="nav-icon">♧</span>
+                Notifications
+            </a>
+
             <p class="nav-title">
                 SYSTEM
             </p>
@@ -310,7 +330,11 @@ $admin_name = $_SESSION["full_name"] ?? "Administrator";
 
 
         <div class="sidebar-bottom">
-
+            <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                <span class="toggle-icon">🌙</span>
+                <span>Dark Mode</span>
+                <span class="toggle-track"></span>
+            </button>
             <a
                 href="logout.php"
                 class="logout-item"
@@ -361,6 +385,24 @@ $admin_name = $_SESSION["full_name"] ?? "Administrator";
 
             <div class="topbar-right">
 
+
+                                                <button
+                    class="theme-toggle-btn"
+                    onclick="toggleTheme()"
+                    title="Toggle Theme"
+                >
+                    <span class="theme-icon-light">☀️</span>
+                    <span class="theme-icon-dark">🌙</span>
+                </button>
+<button
+                    class="notification-button"
+                    type="button"
+                    onclick="window.location.href='notifications.php'"
+                    style="position:relative;"
+                >
+                    🔔
+                    <span class="notification-dot" id="notifBadge" style="display:none;"></span>
+                </button>
 
                 <div class="admin-profile">
 
@@ -611,10 +653,7 @@ $admin_name = $_SESSION["full_name"] ?? "Administrator";
                             </label>
 
 
-                        </div>
-
-
-                        <div class="setting-row">
+                        </div>                        <div class="setting-row">
 
 
                             <div class="setting-info">
@@ -629,7 +668,6 @@ $admin_name = $_SESSION["full_name"] ?? "Administrator";
 
                             </div>
 
-
                             <label class="toggle">
 
                                 <input
@@ -641,6 +679,113 @@ $admin_name = $_SESSION["full_name"] ?? "Administrator";
                                 <span class="toggle-slider"></span>
 
                             </label>
+
+
+                        </div>
+
+
+                        <div class="setting-row">
+
+
+                            <div class="setting-info">
+
+                                <strong>
+                                    Email Notifications
+                                </strong>
+
+                                <span>
+                                    Send email alerts for task, project, and user events. Primary: PHP mail(). Fallback: Formspree.
+                                </span>
+
+                            </div>
+
+                            <label class="toggle">
+
+                                <input
+                                    type="checkbox"
+                                    id="emailNotifToggle"
+                                    checked
+                                >
+
+                                <span class="toggle-slider"></span>
+
+                            </label>
+
+
+                        </div>
+
+
+                        <div class="setting-row">
+
+
+                            <div class="setting-info">
+
+                                <strong>                                    Formspree Form ID (Fallback)
+                                </strong>
+ 
+                                <span>
+                                    Primary: PHP mail() sends to each user's email directly. Fallback: If mail() fails, Formspree sends to your inbox. Enter your Formspree form ID below (e.g. mnpqqobe).
+                                </span>
+
+                            </div>
+
+                            <div class="setting-control" style="width:300px;">
+
+                                <input
+                                    type="text"
+                                    id="formspreeId"
+                                    placeholder="e.g. xrgbkzpl"
+                                    style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;"
+                                >
+
+                            </div>
+
+
+                        </div>
+
+
+                        <div class="setting-row">
+
+
+                            <div class="setting-info">
+
+                                <strong>
+                                    Email Events
+                                </strong>
+
+                                <span>
+                                    Choose which events trigger email notifications.
+                                </span>
+
+                            </div>
+
+                            <div class="setting-control" style="display:flex;flex-direction:column;gap:8px;">
+
+                                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+
+                                    <input type="checkbox" class="email-event" value="task_created" checked>
+                                    Task Created
+                                </label>
+
+                                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+
+                                    <input type="checkbox" class="email-event" value="task_updated" checked>
+                                    Task Updated
+                                </label>
+
+                                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+
+                                    <input type="checkbox" class="email-event" value="project_created" checked>
+                                    Project Created
+                                </label>
+
+                                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+
+                                    <input type="checkbox" class="email-event" value="project_updated" checked>
+                                    Project Updated
+                                </label>
+
+                            </div>
 
 
                         </div>
@@ -892,6 +1037,26 @@ if (deadlineToggle) {
 }
 
 
+// Load notification settings from DB
+var emailNotifToggle = document.getElementById("emailNotifToggle");
+var formspreeId = document.getElementById("formspreeId");
+var emailEvents = document.querySelectorAll(".email-event");
+
+fetch('api/notification_settings.php')
+    .then(function(r) { return r.json(); })
+    .then(function(s) {
+        if (emailNotifToggle && s.email_notifications_enabled !== undefined) emailNotifToggle.checked = s.email_notifications_enabled === '1';
+        if (formspreeId && s.formspree_form_id) formspreeId.value = s.formspree_form_id;
+        if (emailEvents.length > 0 && s.email_events) {
+            var events = s.email_events.split(',');
+            emailEvents.forEach(function(cb) { cb.checked = events.indexOf(cb.value) !== -1; });
+        }
+        if (s.deadline_alerts !== undefined && deadlineToggle) deadlineToggle.checked = s.deadline_alerts === '1';
+        if (s.dashboard_notifications !== undefined && notificationsToggle) notificationsToggle.checked = s.dashboard_notifications === '1';
+    })
+    .catch(function() {});
+
+
 const saveButton =
     document.getElementById("saveSettings");
 
@@ -909,60 +1074,79 @@ if (saveButton) {
             rowsSetting.value
         );
 
-        localStorage.setItem(
-            "pms_notifications",
-            notificationsToggle.checked
-        );
+        // Collect email notification settings for DB
+        var selectedEvents = [];
+        emailEvents.forEach(function(cb) {
+            if (cb.checked) selectedEvents.push(cb.value);
+        });
 
-        localStorage.setItem(
-            "pms_deadlines",
-            deadlineToggle.checked
-        );
+        var payload = {
+            email_notifications_enabled: emailNotifToggle && emailNotifToggle.checked ? '1' : '0',
+            formspree_form_id: formspreeId ? formspreeId.value : '',
+            email_events: selectedEvents.join(','),
+            deadline_alerts: deadlineToggle && deadlineToggle.checked ? '1' : '0',
+            dashboard_notifications: notificationsToggle && notificationsToggle.checked ? '1' : '0'
+        };
 
-        const message =
-            document.getElementById("settingsMessage");
-
-        message.style.display = "block";
-
-        setTimeout(function() {
-            message.style.display = "none";
-        }, 2500);
+        fetch('api/notification_settings.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var message = document.getElementById("settingsMessage");
+            message.style.display = "block";
+            setTimeout(function() { message.style.display = "none"; }, 2500);
+        })
+        .catch(function() {
+            var message = document.getElementById("settingsMessage");
+            message.textContent = 'Error saving. Saved locally.';
+            message.style.background = '#fef3c7';
+            message.style.color = '#92400e';
+            message.style.display = "block";
+            setTimeout(function() { message.style.display = "none"; message.textContent = 'Settings saved successfully.'; message.style.background = '#ecfdf5'; message.style.color = '#166534'; }, 2500);
+        });
 
     });
 
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| MOBILE SIDEBAR
-|--------------------------------------------------------------------------
-*/
-
-const mobileMenuButton =
-    document.getElementById("mobileMenuButton");
-
-const sidebar =
-    document.querySelector(".sidebar");
-
-if (mobileMenuButton && sidebar) {
-
-    mobileMenuButton.addEventListener(
-        "click",
-        function() {
-
-            sidebar.classList.toggle(
-                "mobile-open"
-            );
-
-        }
-    );
-
-}
 
 </script>
 
 
+<?php include "cookie_consent.php"; ?>
+<script src="dark_mode.php"></script>
+<script src="assets/js/responsive.js"></script>
+
+<script>
+(function() {
+    fetch('notification_count.php')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var badge = document.getElementById('notifBadge');
+            if (badge && data.count > 0) {
+                badge.style.display = 'block';
+                badge.title = data.count + ' recent notifications';
+                // Show count as text if > 0
+                if (data.count > 99) {
+                    badge.textContent = '99+';
+                } else {
+                    badge.textContent = data.count;
+                }
+                badge.style.width = 'auto';
+                badge.style.height = 'auto';
+                badge.style.padding = '1px 5px';
+                badge.style.fontSize = '10px';
+                badge.style.borderRadius = '10px';
+                badge.style.fontWeight = '700';
+            }
+        })
+        .catch(function() {});
+})();
+</script>
 </body>
 
 </html>

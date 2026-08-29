@@ -10,12 +10,8 @@ require_once "config/database.php";
 |--------------------------------------------------------------------------
 */
 
-if (!isset($_SESSION["user_id"])) {
-
-    header("Location: login.php");
-    exit;
-
-}
+require_once "auth_check.php";
+require_once "send_email_notification.php";
 
 
 /*
@@ -300,70 +296,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     if ($error === "") {
 
-        $query = "
-            INSERT INTO tasks
-            (
-                project_id,
-                title,
-                description,
-                assigned_to,
-                created_by,
-                due_date,
-                priority,
-                status,
-                estimated_hours,
-                actual_hours
-            )
-            VALUES
-            (
-                ?,
-                ?,
-                ?,
-                ?,
-                ?,
-                ?,
-                ?,
-                'to_do',
-                0,
-                0
-            )
-        ";
+        /*
+        |--------------------------------------------------------------------------
+        | INSERT USING DYNAMIC NULL HANDLING
+        |--------------------------------------------------------------------------
+        */
 
-        $stmt = mysqli_prepare(
-            $conn,
-            $query
-        );
-
-        if ($stmt) {
-
-            mysqli_stmt_bind_param(
-                $stmt,
-                "isssiss",
-                $project_id,
-                $title,
-                $description,
-                $assigned_to,
-                $manager_id,
-                $due_date,
-                $priority
-            );
-
-            /*
-            NOTE:
-            The parameter types above need assigned_to to support NULL.
-            We handle NULL separately below.
-            */
-
-            mysqli_stmt_close($stmt);
-
-
-            /*
-            |--------------------------------------------------------------------------
-            | INSERT USING DYNAMIC NULL HANDLING
-            |--------------------------------------------------------------------------
-            */
-
-            if ($assigned_to === null) {
+        if ($assigned_to === null) {
 
                 $query = "
                     INSERT INTO tasks
@@ -536,6 +475,22 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                 /*
                 |--------------------------------------------------------------------------
+                | EMAIL NOTIFICATION
+                |--------------------------------------------------------------------------
+                */
+
+                send_notification_email(
+                    $conn,
+                    "task_created",
+                    $activity_description,
+                    $project_id,
+                    $manager_id,
+                    $task_id
+                );
+
+
+                /*
+                |--------------------------------------------------------------------------
                 | REDIRECT
                 |--------------------------------------------------------------------------
                 */
@@ -558,13 +513,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     "Failed to create the task. Please try again.";
 
             }
-
-        } else {
-
-            $error =
-                "Unable to prepare the task query.";
-
-        }
 
     }
 
@@ -599,6 +547,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
 <body>
+<script>
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+</script>
 
 
 <div class="admin-layout">
@@ -738,7 +689,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
         <div class="sidebar-bottom">
-
+            <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                <span class="toggle-icon">🌙</span>
+                <span>Dark Mode</span>
+                <span class="toggle-track"></span>
+            </button>
             <a
                 href="logout.php"
                 class="logout-item"
@@ -1306,6 +1261,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 </div>
 
 
+<?php include "cookie_consent.php"; ?>
+<script src="dark_mode.php"></script>
+<script src="assets/js/responsive.js"></script>
 </body>
 
 </html>

@@ -11,10 +11,8 @@ require_once "config/database.php";
 |--------------------------------------------------------------------------
 */
 
-if (!isset($_SESSION["user_id"])) {
-    header("Location: login.php");
-    exit;
-}
+require_once "auth_check.php";
+require_once "send_email_notification.php";
 
 if (!isset($_SESSION["role"]) || $_SESSION["role"] !== "admin") {
     header("Location: dashboard.php");
@@ -561,6 +559,21 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
             /*
             |--------------------------------------------------------------------------
+            | EMAIL NOTIFICATION
+            |--------------------------------------------------------------------------
+            */
+
+            send_notification_email(
+                $conn,
+                "project_created",
+                $activity_description,
+                $project_id,
+                $admin_id
+            );
+
+
+            /*
+            |--------------------------------------------------------------------------
             | Commit
             |--------------------------------------------------------------------------
             */
@@ -626,6 +639,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
 <body>
+<script>
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+</script>
 
 <div class="admin-layout">
 
@@ -744,6 +760,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             </p>
 
 
+                        <a
+                href="notifications.php"
+                class="nav-item"
+            >
+                <span class="nav-icon">♧</span>
+                Notifications
+            </a>
+
             <a
                 href="profile.php"
                 class="nav-item"
@@ -761,7 +785,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
         <div class="sidebar-bottom">
-
+            <button class="dark-mode-toggle" onclick="toggleDarkMode()" title="Toggle Dark Mode">
+                <span class="toggle-icon">🌙</span>
+                <span>Dark Mode</span>
+                <span class="toggle-track"></span>
+            </button>
             <a
                 href="logout.php"
                 class="logout-item"
@@ -1275,6 +1303,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 </div>
 
+<?php include "cookie_consent.php"; ?>
+<script src="dark_mode.php"></script>
+<script src="assets/js/responsive.js"></script>
 </body>
 
 </html>
