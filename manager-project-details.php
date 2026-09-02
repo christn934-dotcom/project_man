@@ -11,6 +11,7 @@ require_once "config/database.php";
 */
 
 require_once "auth_check.php";
+require_once "avatar_helper.php";;
 
 
 /*
@@ -540,6 +541,28 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
 
         }
 
+        .status-workflow { display: flex; align-items: center; gap: 0; margin-top: 20px; padding: 18px; background: #f8f9fb; border-radius: 10px; }
+        .workflow-step { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; color: #9ca3af; transition: all 0.3s; }
+        .workflow-step.active { background: #4f46e5; color: #fff; box-shadow: 0 2px 10px rgba(79,70,229,0.3); }
+        .workflow-step.done { background: #ecfdf5; color: #059669; }
+        .workflow-step.hold { background: #fff7ed; color: #ea580c; }
+        .workflow-step.cancelled { background: #fef2f2; color: #dc2626; }
+        .workflow-step.pending { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+        .workflow-arrow { color: #d1d5db; font-size: 16px; margin: 0 4px; }
+        .workflow-arrow.done { color: #059669; }
+        body.dark .status-workflow { background: #1a1d24; }
+        body.dark .workflow-step { color: #6b7280; }
+        body.dark .workflow-arrow { color: #374151; }
+
+        /* Dark mode text overrides */
+        body.dark .project-details-label { color: #94a3b8; }
+        body.dark .project-description { color: #cbd5e1; }
+        body.dark .task-summary-item span { color: #94a3b8; }
+        body.dark .member-details strong { color: #f1f5f9; }
+        body.dark .member-details small { color: #94a3b8; }
+        body.dark .no-members { color: #64748b; }
+        body.dark .workflow-label { color: #94a3b8; }
+
     </style>
 
 </head>
@@ -547,7 +570,7 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
 
 <body>
 <script>
-(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark'){document.body.classList.add('dark');document.body.classList.remove('light')}else if(t==='light'){document.body.classList.add('light');document.body.classList.remove('dark')}})();
 </script>
 
 
@@ -679,6 +702,19 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
             </a>
 
             <a
+                href="manager-settings.php"
+                class="nav-item"
+            >
+
+                <span class="nav-icon">
+                    ⚙
+                </span>
+
+                Settings
+
+            </a>
+
+            <a
                 href="profile.php"
                 class="nav-item"
             >
@@ -767,8 +803,8 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
                     onclick="toggleTheme()"
                     title="Toggle Theme"
                 >
-                    <span class="theme-icon-light">☀️</span>
-                    <span class="theme-icon-dark">🌙</span>
+                    <span class="theme-icon-light"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></span>
+                    <span class="theme-icon-dark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
                 </button>
 <button
                     class="notification-button"
@@ -776,7 +812,7 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
                     onclick="window.location.href='notifications.php'"
                     style="position:relative;"
                 >
-                    🔔
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                     <span class="notification-dot" id="notifBadge" style="display:none;"></span>
                 </button>
 
@@ -784,19 +820,7 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
                 <div class="admin-profile">
 
 
-                    <div class="profile-avatar">
-
-                        <?= htmlspecialchars(
-                            strtoupper(
-                                substr(
-                                    $manager_name,
-                                    0,
-                                    2
-                                )
-                            )
-                        ) ?>
-
-                    </div>
+                    <?= render_avatar($_SESSION["profile_image"] ?? null, $manager_name, (int)($_SESSION["user_id"])) ?>
 
 
                     <div class="profile-info">
@@ -928,6 +952,13 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
                         class="secondary-button"
                     >
                         ← Back to Projects
+                    </a>
+
+                    <a
+                        href="manager-edit-project.php?id=<?= (int) $project["id"] ?>"
+                        class="primary-button"
+                    >
+                        ✎ Edit Project
                     </a>
 
 
@@ -1144,6 +1175,35 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
 
                     </div>
 
+                    <?php
+                    $workflow = [["planning", "Planning"], ["in_progress", "In Progress"], ["pending_approval", "⏳ Approval"], ["completed", "Completed"]];
+                    $statuses_order = ["planning" => 0, "in_progress" => 1, "pending_approval" => 2, "completed" => 3];
+                    $current_idx = $statuses_order[$project["status"]] ?? -1;
+                    $is_on_hold = ($project["status"] === "on_hold");
+                    $is_cancelled = ($project["status"] === "cancelled");
+                    ?>
+                    <div class="status-workflow">
+                        <?php foreach ($workflow as $i => [$val, $label]): ?>
+                            <?php if ($i > 0): ?>
+                                <span class="workflow-arrow <?= ($i <= $current_idx && !$is_cancelled) ? 'done' : '' ?>">→</span>
+                            <?php endif; ?>
+                            <div class="workflow-step <?=
+                                $is_cancelled ? 'cancelled' :
+                                ($val === $project['status'] ? 'active' : '') .
+                                ($i < $current_idx && !$is_cancelled ? ' done' : '') .
+                                ($is_on_hold && $val === 'in_progress' ? ' hold' : '')
+                            ?>">
+                                <?= ($i < $current_idx && !$is_cancelled && !$is_on_hold) ? '✓ ' : '' ?><?= $label ?>
+                            </div>
+                        <?php endforeach; ?>
+                        <?php if ($is_on_hold): ?>
+                            <span class="workflow-arrow">→</span>
+                            <div class="workflow-step hold">⏸ On Hold</div>
+                        <?php elseif ($is_cancelled): ?>
+                            <span class="workflow-arrow">→</span>
+                            <div class="workflow-step cancelled">✕ Cancelled</div>
+                        <?php endif; ?>
+                    </div>
 
                 </div>
 
@@ -1297,17 +1357,7 @@ $manager_name = $_SESSION["full_name"] ?? "Project Manager";
                             <div class="member-item">
 
 
-                                <div class="member-avatar">
-
-                                    <?= htmlspecialchars(
-                                        strtoupper(
-                                            substr(
-                                                $member["full_name"],
-                                                0,
-                                                2
-                                            )
-                                        )
-                                    ) ?>
+                                <?= render_avatar($member["profile_image"] ?? null, $member["full_name"], (int)$member["id"], 'md') ?>
 
                                 </div>
 

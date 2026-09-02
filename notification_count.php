@@ -70,9 +70,7 @@ if ($role === "admin") {
             $count = (int) $row["cnt"];
         }
         mysqli_stmt_close($stmt);
-    }
-
-} else {
+    }    } else {
 
     $query = "
         SELECT COUNT(*) AS cnt
@@ -94,6 +92,18 @@ if ($role === "admin") {
         mysqli_stmt_close($stmt);
     }
 
+}
+
+/* Also count unread user-specific notifications (task assignments, etc.) */
+$unread_notif = mysqli_prepare($conn, "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id = ? AND is_read = 0");
+if ($unread_notif) {
+    mysqli_stmt_bind_param($unread_notif, "i", $user_id);
+    mysqli_stmt_execute($unread_notif);
+    $notif_result = mysqli_stmt_get_result($unread_notif);
+    if ($notif_row = mysqli_fetch_assoc($notif_result)) {
+        $count += (int) $notif_row["cnt"];
+    }
+    mysqli_stmt_close($unread_notif);
 }
 
 echo json_encode(["count" => $count]);

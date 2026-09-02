@@ -12,6 +12,7 @@ require_once "config/database.php";
 */
 
 require_once "auth_check.php";
+require_once "avatar_helper.php";;
 require_once "send_email_notification.php";
 
 if (!isset($_SESSION["role"]) || $_SESSION["role"] !== "admin") {
@@ -640,7 +641,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 <body>
 <script>
-(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark'){document.body.classList.add('dark');document.body.classList.remove('light')}else if(t==='light'){document.body.classList.add('light');document.body.classList.remove('dark')}})();
 </script>
 
 <div class="admin-layout">
@@ -835,19 +836,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                 <div class="admin-profile">
 
-                    <div class="profile-avatar">
-
-                        <?= htmlspecialchars(
-                            strtoupper(
-                                substr(
-                                    $_SESSION["full_name"],
-                                    0,
-                                    2
-                                )
-                            )
-                        ) ?>
-
-                    </div>
+                    <?= render_avatar($_SESSION["profile_image"] ?? null, $_SESSION["full_name"], (int)($_SESSION["user_id"] ?? 0)) ?>
 
 
                     <div class="profile-info">

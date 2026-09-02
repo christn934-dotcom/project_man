@@ -1,0 +1,79 @@
+[Mon Aug 31 17:02:25 2026] PHP 8.3.28 Development Server (http://localhost:8080) started
+[Mon Aug 31 17:03:04 2026] [::1]:52430 Accepted
+[Mon Aug 31 17:03:04 2026] [::1]:52430 [200]: GET /
+[Mon Aug 31 17:03:04 2026] [::1]:52430 Closing
+[Mon Aug 31 17:03:05 2026] [::1]:52432 Accepted
+[Mon Aug 31 17:03:05 2026] [::1]:52432 [200]: GET /
+[Mon Aug 31 17:03:05 2026] [::1]:52432 Closing
+[Mon Aug 31 17:03:05 2026] [::1]:52433 Accepted
+[Mon Aug 31 17:03:05 2026] [::1]:52433 [200]: GET /dark_mode.php
+[Mon Aug 31 17:03:05 2026] [::1]:52433 Closing
+[Mon Aug 31 17:03:05 2026] [::1]:52434 Accepted
+[Mon Aug 31 17:03:05 2026] [::1]:52434 [401]: GET /api/user_theme.php
+[Mon Aug 31 17:03:05 2026] [::1]:52434 Closing
+[Mon Aug 31 17:03:31 2026] [::1]:52442 Accepted
+[Mon Aug 31 17:03:31 2026] [::1]:52442 [200]: GET /login.php
+[Mon Aug 31 17:03:31 2026] [::1]:52442 Closing
+[Mon Aug 31 17:03:31 2026] [::1]:52444 Accepted
+[Mon Aug 31 17:03:31 2026] [::1]:52444 [200]: GET /assets/css/style.css
+[Mon Aug 31 17:03:31 2026] [::1]:52445 Accepted
+[Mon Aug 31 17:03:31 2026] [::1]:52445 [200]: GET /dark_mode.php
+[Mon Aug 31 17:03:31 2026] [::1]:52445 Closing
+[Mon Aug 31 17:03:31 2026] [::1]:52444 Closing
+[Mon Aug 31 17:03:31 2026] [::1]:52446 Accepted
+[Mon Aug 31 17:03:31 2026] [::1]:52446 [401]: GET /api/user_theme.php
+[Mon Aug 31 17:03:31 2026] [::1]:52446 Closing
+[Mon Aug 31 17:03:46 2026] [::1]:54099 Accepted
+[Mon Aug 31 17:03:46 2026] [::1]:54099 [200]: GET /login.php
+[Mon Aug 31 17:03:46 2026] [::1]:54099 Closing
+[Mon Aug 31 17:03:46 2026] [::1]:54101 Accepted
+[Mon Aug 31 17:03:46 2026] [::1]:54102 Accepted
+[Mon Aug 31 17:03:46 2026] [::1]:54101 [200]: GET /assets/css/style.css
+[Mon Aug 31 17:03:46 2026] [::1]:54102 [200]: GET /dark_mode.php
+[Mon Aug 31 17:03:46 2026] [::1]:54102 Closing
+[Mon Aug 31 17:03:46 2026] [::1]:54101 Closing
+[Mon Aug 31 17:03:46 2026] [::1]:54103 Accepted
+[Mon Aug 31 17:03:46 2026] [::1]:54103 [401]: GET /api/user_theme.php
+[Mon Aug 31 17:03:46 2026] [::1]:54103 Closing
+[Mon Aug 31 17:04:52 2026] [::1]:58646 Accepted
+[Mon Aug 31 17:04:52 2026] [::1]:58646 [200]: POST /login.php
+[Mon Aug 31 17:04:52 2026] [::1]:58646 Closing
+[Mon Aug 31 17:04:52 2026] [::1]:58648 Accepted
+[Mon Aug 31 17:04:52 2026] [::1]:58649 Accepted
+[Mon Aug 31 17:04:52 2026] [::1]:58648 [200]: GET /assets/css/style.css
+[Mon Aug 31 17:04:52 2026] [::1]:58649 [200]: GET /dark_mode.php
+[Mon Aug 31 17:04:52 2026] [::1]:58649 Closing
+[Mon Aug 31 17:04:52 2026] [::1]:58648 Closing
+[Mon Aug 31 17:04:52 2026] [::1]:58650 Accepted
+[Mon Aug 31 17:04:52 2026] [::1]:58650 [401]: GET /api/user_theme.php
+[Mon Aug 31 17:04:52 2026] [::1]:58650 Closing
+[Mon Aug 31 17:05:52 2026] [::1]:60015 Accepted
+[Mon Aug 31 17:05:52 2026] [::1]:60015 [200]: GET /login.php
+[Mon Aug 31 17:05:52 2026] [::1]:60015 Closing
+[Mon Aug 31 17:05:52 2026] [::1]:60017 Accepted
+[Mon Aug 31 17:05:52 2026] [::1]:60018 Accepted
+[Mon Aug 31 17:05:52 2026] [::1]:60017 [200]: GET /dark_mode.php
+[Mon Aug 31 17:05:52 2026] [::1]:60017 Closing
+[Mon Aug 31 17:05:52 2026] [::1]:60018 [200]: GET /assets/css/style.css
+[Mon Aug 31 17:05:52 2026] [::1]:60018 Closing
+[Mon Aug 31 17:05:52 2026] [::1]:60019 Accepted
+[Mon Aug 31 17:05:52 2026] [::1]:60019 [401]: GET /api/user_theme.php
+[Mon Aug 31 17:05:52 2026] [::1]:60019 Closing
+[Mon Aug 31 17:20:16 2026] [::1]:64106 Accepted
+[Mon Aug 31 17:20:16 2026] [::1]:64106 [401]: POST /api/user_theme.php
+[Mon Aug 31 17:20:16 2026] [::1]:64106 Closing
+[Mon Aug 31 17:20:17 2026] [::1]:64108 Accepted
+[Mon Aug 31 17:20:17 2026] [::1]:64108 [401]: POST /api/user_theme.php
+[Mon Aug 31 17:20:17 2026] [::1]:64108 Closing
+[Mon Aug 31 17:22:48 2026] [::1]:50896 Accepted
+[Mon Aug 31 17:22:48 2026] [::1]:50896 [302]: POST /login.php
+[Mon Aug 31 17:22:48 2026] [::1]:50896 Closing
+[Mon Aug 31 17:22:48 2026] [::1]:50898 Accepted
+[Mon Aug 31 17:22:48 2026] [::1]:50898 [200]: GET /admin-dashboard.php
+[Mon Aug 31 17:22:48 2026] [::1]:50898 Closing
+[Mon Aug 31 17:22:48 2026] [::1]:50900 Accepted
+[Mon Aug 31 17:22:48 2026] [::1]:50900 [302]: GET /admin-dashboard.php
+[Mon Aug 31 17:22:48 2026] [::1]:50900 Closing
+[Mon Aug 31 17:22:48 2026] [::1]:50902 Accepted
+[Mon Aug 31 17:22:48 2026] [::1]:50902 [200]: GET /login.php
+[Mon Aug 31 17:22:48 2026] [::1]:50902 Closing

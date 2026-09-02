@@ -8,6 +8,7 @@ require_once "config/database.php";
 /*|--------------------------------------------------------------------------| MEMBER PROTECTION|--------------------------------------------------------------------------|*/
 
 require_once "auth_check.php";
+require_once "avatar_helper.php";;
 
 /* Update last_seen_at for notification badge tracking */
 $__ls_uid = $_SESSION["user_id"] ?? 0;
@@ -114,7 +115,7 @@ foreach ($tasks as $task) {
 </head>
 <body>
 <script>
-(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark'){document.body.classList.add('dark');document.body.classList.remove('light')}else if(t==='light'){document.body.classList.add('light');document.body.classList.remove('dark')}})();
 </script>
 
 <div class="admin-layout">
@@ -133,6 +134,7 @@ foreach ($tasks as $task) {
             <a href="team.php" class="nav-item"><span class="nav-icon">♙</span> Team</a>
             <a href="notifications.php" class="nav-item"><span class="nav-icon">♧</span> Notifications</a>
             <p class="nav-title">SYSTEM</p>
+            <a href="member-settings.php" class="nav-item"><span class="nav-icon">⚙</span> Settings</a>
             <a href="profile.php" class="nav-item"><span class="nav-icon">◉</span> My Profile</a>
         </nav>
         <div class="sidebar-bottom">
@@ -157,8 +159,8 @@ foreach ($tasks as $task) {
                     onclick="toggleTheme()"
                     title="Toggle Theme"
                 >
-                    <span class="theme-icon-light">☀️</span>
-                    <span class="theme-icon-dark">🌙</span>
+                    <span class="theme-icon-light"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></span>
+                    <span class="theme-icon-dark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
                 </button>
 <button
                     class="notification-button"
@@ -166,12 +168,12 @@ foreach ($tasks as $task) {
                     onclick="window.location.href='notifications.php'"
                     style="position:relative;"
                 >
-                    🔔
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                     <span class="notification-dot" id="notifBadge" style="display:none;"></span>
                 </button>
 
                 <div class="admin-profile">
-                    <div class="profile-avatar"><?= htmlspecialchars(strtoupper(substr($member_name, 0, 2))) ?></div>
+                    <?= render_avatar($_SESSION["profile_image"] ?? null, $member_name, (int)($_SESSION["user_id"])) ?>
                     <div class="profile-info"><strong><?= htmlspecialchars($member_name) ?></strong><span>Team Member</span></div>
                     <span class="profile-arrow">▾</span>
                 </div>
@@ -190,6 +192,18 @@ foreach ($tasks as $task) {
                     <span class="project-count"><?= $total_tasks ?> Task<?= $total_tasks != 1 ? "s" : "" ?></span>
                 </div>
             </div>
+
+            <?php if (isset($_GET["updated"]) && $_GET["updated"] == "1"): ?>
+                <div class="success-alert">✓ Task status updated successfully.</div>
+            <?php endif; ?>
+
+            <?php if (isset($_GET["error"])): ?>
+                <div class="alert alert-error"><?= htmlspecialchars($_GET["error"]) ?></div>
+            <?php endif; ?>
+
+            <?php if (isset($_GET["info"])): ?>
+                <div class="success-alert"><?= htmlspecialchars($_GET["info"]) ?></div>
+            <?php endif; ?>
 
             <!-- STATS -->
             <div class="task-stat-grid">
@@ -215,6 +229,7 @@ foreach ($tasks as $task) {
                                     <th>Due Date</th>
                                     <th>Priority</th>
                                     <th>Status</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -247,6 +262,25 @@ foreach ($tasks as $task) {
                                         </td>
                                         <td><span class="priority-badge priority-<?= htmlspecialchars($task["priority"]) ?>"><?= ucfirst(htmlspecialchars($task["priority"])) ?></span></td>
                                         <td><span class="status-badge status-<?= htmlspecialchars($task["status"]) ?>"><?= ucfirst(str_replace("_", " ", htmlspecialchars($task["status"]))) ?></span></td>
+                                        <td>
+                                            <?php if ($task["status"] === "to_do"): ?>
+                                                <form method="POST" action="member-task-update.php" style="display:inline;">
+                                                    <input type="hidden" name="task_id" value="<?= (int) $task["id"] ?>">
+                                                    <input type="hidden" name="status" value="in_progress">
+                                                    <button type="submit" class="primary-button" style="padding:5px 12px; font-size:12px;">▶ Start</button>
+                                                </form>
+                                            <?php elseif ($task["status"] === "in_progress"): ?>
+                                                <form method="POST" action="member-task-update.php" style="display:inline;">
+                                                    <input type="hidden" name="task_id" value="<?= (int) $task["id"] ?>">
+                                                    <input type="hidden" name="status" value="review">
+                                                    <button type="submit" class="primary-button" style="padding:5px 12px; font-size:12px; background:#8b5cf6;">👁 Submit for Review</button>
+                                                </form>
+                                            <?php elseif ($task["status"] === "review"): ?>
+                                                <span style="color:#ca8a04; font-size:12px; font-weight:600;">⏳ Awaiting Approval</span>
+                                            <?php elseif ($task["status"] === "completed"): ?>
+                                                <span style="color:#059669; font-size:13px;">✓ Approved & Done</span>
+                                            <?php endif; ?>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>

@@ -12,6 +12,7 @@ require_once "config/database.php";
 */
 
 require_once "auth_check.php";
+require_once "avatar_helper.php";;
 
 if (
     !isset($_SESSION["role"]) ||
@@ -77,7 +78,8 @@ $query = "
         id,
         full_name,
         email,
-        role
+        role,
+                        profile_image
     FROM users
     WHERE role IN ('member', 'project_manager')
       AND status = 'active'
@@ -121,7 +123,9 @@ $query = "
 
         p.name AS project_name,
 
-        u.full_name AS assigned_name
+        u.full_name AS assigned_name,
+        u.profile_image AS assigned_profile_image,
+        u.id AS assigned_user_id
 
     FROM tasks t
 
@@ -705,7 +709,7 @@ foreach ($tasks as $task) {
 
 <body>
 <script>
-(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark'){document.body.classList.add('dark');document.body.classList.remove('light')}else if(t==='light'){document.body.classList.add('light');document.body.classList.remove('dark')}})();
 </script>
 
 
@@ -956,8 +960,8 @@ foreach ($tasks as $task) {
                     onclick="toggleTheme()"
                     title="Toggle Theme"
                 >
-                    <span class="theme-icon-light">☀️</span>
-                    <span class="theme-icon-dark">🌙</span>
+                    <span class="theme-icon-light"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></span>
+                    <span class="theme-icon-dark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
                 </button>
 <button
                     class="notification-button"
@@ -965,7 +969,7 @@ foreach ($tasks as $task) {
                     onclick="window.location.href='notifications.php'"
                     style="position:relative;"
                 >
-                    🔔
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                     <span class="notification-dot" id="notifBadge" style="display:none;"></span>
                 </button>
 
@@ -973,19 +977,7 @@ foreach ($tasks as $task) {
                 <div class="admin-profile">
 
 
-                    <div class="profile-avatar">
-
-                        <?= htmlspecialchars(
-                            strtoupper(
-                                substr(
-                                    $admin_name,
-                                    0,
-                                    2
-                                )
-                            )
-                        ) ?>
-
-                    </div>
+                    <?= render_avatar($_SESSION["profile_image"] ?? null, $admin_name, (int)($_SESSION["user_id"])) ?>
 
 
                     <div class="profile-info">
@@ -1313,21 +1305,7 @@ foreach ($tasks as $task) {
                                                 >
 
 
-                                                    <div
-                                                        class="task-avatar"
-                                                    >
-
-                                                        <?= htmlspecialchars(
-                                                            strtoupper(
-                                                                substr(
-                                                                    $task["assigned_name"],
-                                                                    0,
-                                                                    2
-                                                                )
-                                                            )
-                                                        ) ?>
-
-                                                    </div>
+                                                    <?= render_avatar($task["assigned_profile_image"] ?? null, $task["assigned_name"], (int)($task["assigned_user_id"] ?? 0)) ?>
 
 
                                                     <span>
@@ -1462,23 +1440,31 @@ foreach ($tasks as $task) {
 
                                             <div
                                                 class="task-actions"
-                                            >
-
-
-                                                <a
-                                                    href="edit-task.php?id=<?= (int) $task["id"] ?>"
-                                                    class="task-action-button"
-                                                >
-                                                    Edit
-                                                </a>
-
-
-                                                <form method="POST" action="delete-task.php" style="display:inline;">
-                                                    <input type="hidden" name="id" value="<?= (int) $task["id"] ?>">
-                                                    <button type="submit" class="task-action-button delete-task" onclick="return confirm('Are you sure you want to delete this task?');" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font:inherit;text-decoration:none;">
-                                                        Delete
-                                                    </button>
-                                                </form>
+                                            >                                                <?php if ($task["status"] === "review"): ?>
+                                                    <form method="POST" action="approve-task.php" style="display:inline;">
+                                                        <input type="hidden" name="task_id" value="<?= (int) $task["id"] ?>">
+                                                        <input type="hidden" name="approve_action" value="approve">
+                                                        <button type="submit" class="task-action-button" style="color:#059669; font-weight:600;">✓ Approve</button>
+                                                    </form>
+                                                    <form method="POST" action="approve-task.php" style="display:inline;">
+                                                        <input type="hidden" name="task_id" value="<?= (int) $task["id"] ?>">
+                                                        <input type="hidden" name="approve_action" value="reject">
+                                                        <button type="submit" class="task-action-button" style="color:#dc2626;">↩ Send Back</button>
+                                                    </form>
+                                                <?php else: ?>
+                                                    <a
+                                                        href="edit-task.php?id=<?= (int) $task["id"] ?>"
+                                                        class="task-action-button"
+                                                    >
+                                                        Edit
+                                                    </a>
+                                                    <form method="POST" action="delete-task.php" style="display:inline;">
+                                                        <input type="hidden" name="id" value="<?= (int) $task["id"] ?>">
+                                                        <button type="submit" class="task-action-button delete-task" onclick="return confirm('Are you sure you want to delete this task?');" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font:inherit;text-decoration:none;">
+                                                            Delete
+                                                        </button>
+                                                    </form>
+                                                <?php endif; ?>
 
 
                                             </div>
@@ -1689,7 +1675,9 @@ foreach ($tasks as $task) {
 
                     <select
                         name="project_id"
+                        id="taskProjectSelect"
                         required
+                        onchange="loadProjectMembers(this.value)"
                     >
 
 
@@ -1730,47 +1718,51 @@ foreach ($tasks as $task) {
 
 
                     <label>
-                        Assign To
+                        Assign To <small style="color:#9ca3af;font-weight:normal;">(only project members shown)</small>
                     </label>
 
 
                     <select
                         name="assigned_to"
+                        id="taskAssigneeSelect"
                     >
 
 
                         <option value="">
-                            Unassigned
+                            Select a project first
                         </option>
 
 
-                        <?php foreach (
-                            $users as $user
-                        ): ?>
-
-
-                            <option
-                                value="<?= (int) $user["id"] ?>"
-                            >
-
-                                <?= htmlspecialchars(
-                                    $user["full_name"]
-                                ) ?>
-
-                                —
-
-                                <?= $user["role"] === "project_manager"
-                                    ? "Project Manager"
-                                    : "Team Member"
-                                ?>
-
-                            </option>
-
-
-                        <?php endforeach; ?>
-
-
                     </select>
+
+
+                    <script>
+                    function loadProjectMembers(projectId) {
+                        var sel = document.getElementById('taskAssigneeSelect');
+                        if (!projectId) {
+                            sel.innerHTML = '<option value="">Select a project first</option>';
+                            return;
+                        }
+                        sel.innerHTML = '<option value="">Loading members...</option>';
+                        fetch('api/project_members.php?project_id=' + projectId)
+                            .then(function(r) { return r.json(); })
+                            .then(function(data) {
+                                var html = '<option value="">Unassigned</option>';
+                                if (data.members && data.members.length > 0) {
+                                    data.members.forEach(function(m) {
+                                        var roleLabel = m.role === 'project_manager' ? 'Manager' : 'Member';
+                                        html += '<option value="' + m.id + '">' + m.full_name + ' — ' + roleLabel + '</option>';
+                                    });
+                                } else {
+                                    html = '<option value="">No members in this project</option>';
+                                }
+                                sel.innerHTML = html;
+                            })
+                            .catch(function() {
+                                sel.innerHTML = '<option value="">Error loading members</option>';
+                            });
+                    }
+                    </script>
 
 
                 </div>

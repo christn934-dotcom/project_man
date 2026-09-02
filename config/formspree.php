@@ -14,7 +14,7 @@
 $defaults = [
     'email_notifications_enabled' => '1',
     'formspree_form_id'           => 'mnpqqobe',
-    'email_events'                => 'task_created,task_updated,project_created,project_updated',
+    'email_events'                => 'task_created,task_updated,task_deleted,task_submitted_for_review,task_approved,task_rejected,project_created,project_updated,project_deleted,project_submitted_for_approval,project_approved,project_rejected,user_created,user_deleted,user_updated',
 ];
 
 // Try loading from DB

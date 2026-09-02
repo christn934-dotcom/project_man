@@ -11,6 +11,7 @@ require_once "config/database.php";
 */
 
 require_once "auth_check.php";
+require_once "avatar_helper.php";;
 require_once "send_email_notification.php";
 
 
@@ -22,7 +23,7 @@ require_once "send_email_notification.php";
 
 if (
     !isset($_SESSION["role"]) ||
-    $_SESSION["role"] !== "project_manager"
+    ($_SESSION["role"] !== "project_manager" && $_SESSION["role"] !== "admin")
 ) {
 
     header("Location: dashboard.php");
@@ -30,9 +31,11 @@ if (
 
 }
 
+$role = $_SESSION["role"];
+
 
 $manager_id = (int) $_SESSION["user_id"];
-$manager_name = $_SESSION["full_name"] ?? "Project Manager";
+$manager_name = $_SESSION["full_name"] ?? ($role === "admin" ? "Administrator" : "Project Manager");
 
 $error = "";
 
@@ -41,48 +44,37 @@ $success = "";
 
 /*
 |--------------------------------------------------------------------------
-| GET MANAGER'S PROJECTS
+| GET PROJECTS
 |--------------------------------------------------------------------------
 */
 
 $projects = [];
 
-$query = "
-    SELECT
-        id,
-        name
-    FROM projects
-    WHERE manager_id = ?
-    ORDER BY name ASC
-";
-
-$stmt = mysqli_prepare($conn, $query);
-
-if ($stmt) {
-
-    mysqli_stmt_bind_param(
-        $stmt,
-        "i",
-        $manager_id
-    );
-
-    mysqli_stmt_execute($stmt);
-
-    $result = mysqli_stmt_get_result($stmt);
-
+if ($role === "admin") {
+    $query = "SELECT id, name FROM projects ORDER BY name ASC";
+    $result = mysqli_query($conn, $query);
     if ($result) {
-
         while ($row = mysqli_fetch_assoc($result)) {
-
             $projects[] = $row;
-
         }
-
     }
-
-    mysqli_stmt_close($stmt);
-
+} else {
+    $query = "SELECT id, name FROM projects WHERE manager_id = ? ORDER BY name ASC";
+    $stmt = mysqli_prepare($conn, $query);
+    if ($stmt) {
+        mysqli_stmt_bind_param($stmt, "i", $manager_id);
+        mysqli_stmt_execute($stmt);
+        $result = mysqli_stmt_get_result($stmt);
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $projects[] = $row;
+            }
+        }
+        mysqli_stmt_close($stmt);
+    }
 }
+
+
 
 
 /*
@@ -175,12 +167,27 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     /*
     |--------------------------------------------------------------------------
-    | CHECK PROJECT BELONGS TO MANAGER
+    | CHECK PROJECT BELONGS TO MANAGER (or admin can access all)
     |--------------------------------------------------------------------------
     */
 
     if ($error === "") {
 
+        if ($role === "admin") {
+            $query = "SELECT id FROM projects WHERE id = ? LIMIT 1";
+            $stmt = mysqli_prepare($conn, $query);
+            if ($stmt) {
+                mysqli_stmt_bind_param($stmt, "i", $project_id);
+                mysqli_stmt_execute($stmt);
+                $result = mysqli_stmt_get_result($stmt);
+                if (!$result || mysqli_num_rows($result) !== 1) {
+                    $error = "Project not found.";
+                }
+                mysqli_stmt_close($stmt);
+            } else {
+                $error = "Unable to verify the selected project.";
+            }
+        } else {
         $query = "
             SELECT id
             FROM projects
@@ -225,13 +232,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 "Unable to verify the selected project.";
 
         }
-
-    }
-
-
-    /*
+        } /* end project ownership check */
+    }    /*
     |--------------------------------------------------------------------------
-    | CHECK ASSIGNED MEMBER
+    | CHECK ASSIGNED MEMBER BELONGS TO PROJECT
+    | Only the project manager or project members can be assigned tasks.
     |--------------------------------------------------------------------------
     */
 
@@ -240,12 +245,20 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $assigned_to !== null
     ) {
 
+        /* Check: is this user the project manager OR a project member? */
         $query = "
-            SELECT id
-            FROM users
-            WHERE id = ?
-            AND role = 'member'
-            AND status = 'active'
+            SELECT 1
+            FROM users u
+            WHERE u.id = ?
+            AND u.status = 'active'
+            AND (
+                u.id IN (
+                    SELECT manager_id FROM projects WHERE id = ?
+                )
+                OR u.id IN (
+                    SELECT user_id FROM project_members WHERE project_id = ?
+                )
+            )
             LIMIT 1
         ";
 
@@ -258,8 +271,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
             mysqli_stmt_bind_param(
                 $stmt,
-                "i",
-                $assigned_to
+                "iii",
+                $assigned_to,
+                $project_id,
+                $project_id
             );
 
             mysqli_stmt_execute($stmt);
@@ -267,12 +282,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $result = mysqli_stmt_get_result($stmt);
 
             if (
-                !$result ||
-                mysqli_num_rows($result) !== 1
+                !$result || mysqli_num_rows($result) !== 1
             ) {
 
                 $error =
-                    "The selected team member is invalid.";
+                    "That person is not a member of the selected project. Add them to the project first.";
 
             }
 
@@ -491,12 +505,45 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                 /*
                 |--------------------------------------------------------------------------
+                | IN-APP NOTIFICATION TO ASSIGNED MEMBER
+                |--------------------------------------------------------------------------
+                */
+
+                if ($assigned_to !== null && $assigned_to > 0) {
+
+                    /* Get project name for the notification */
+                    $proj_name = "";
+                    $pn_stmt = mysqli_prepare($conn, "SELECT name FROM projects WHERE id = ? LIMIT 1");
+                    if ($pn_stmt) {
+                        mysqli_stmt_bind_param($pn_stmt, "i", $project_id);
+                        mysqli_stmt_execute($pn_stmt);
+                        $pn_result = mysqli_stmt_get_result($pn_stmt);
+                        if ($pn_row = mysqli_fetch_assoc($pn_result)) {
+                            $proj_name = $pn_row["name"];
+                        }
+                        mysqli_stmt_close($pn_stmt);
+                    }
+
+                    insert_user_notification(
+                        $conn,
+                        $assigned_to,
+                        "New Task Assigned",
+                        $manager_name . " assigned you the task \"" . $title . "\" in project \"" . $proj_name . "\"",
+                        "task_assigned"
+                    );
+
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
                 | REDIRECT
                 |--------------------------------------------------------------------------
                 */
 
+                $redirect = ($role === "admin") ? "tasks.php" : "manager-tasks.php";
                 header(
-                    "Location: manager-tasks.php?created=1"
+                    "Location: $redirect?created=1"
                 );
 
                 exit;
@@ -548,7 +595,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 <body>
 <script>
-(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark'){document.body.classList.add('dark');document.body.classList.remove('light')}else if(t==='light'){document.body.classList.add('light');document.body.classList.remove('dark')}})();
 </script>
 
 
@@ -585,105 +632,48 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         <nav class="sidebar-nav">
 
+            <p class="nav-title">MAIN</p>
 
-            <p class="nav-title">
-                MAIN
-            </p>
+            <?php if ($role === "admin"): ?>
+                <a href="admin-dashboard.php" class="nav-item">
+                    <span class="nav-icon">▦</span> Dashboard
+                </a>
+                <a href="admin-projects.php" class="nav-item">
+                    <span class="nav-icon">▣</span> Projects
+                </a>
+                <a href="tasks.php" class="nav-item active">
+                    <span class="nav-icon">✓</span> Tasks
+                </a>
+                <p class="nav-title">MANAGEMENT</p>
+                <a href="admin-users.php" class="nav-item">
+                    <span class="nav-icon">♙</span> Users
+                </a>
+                <a href="admin-reports.php" class="nav-item">
+                    <span class="nav-icon">▥</span> Reports
+                </a>
+            <?php else: ?>
+                <a href="manager-dashboard.php" class="nav-item">
+                    <span class="nav-icon">▦</span> Dashboard
+                </a>
+                <a href="manager-projects.php" class="nav-item">
+                    <span class="nav-icon">▣</span> My Projects
+                </a>
+                <a href="manager-tasks.php" class="nav-item active">
+                    <span class="nav-icon">✓</span> Tasks
+                </a>
+                <p class="nav-title">WORKSPACE</p>
+                <a href="manager-team.php" class="nav-item">
+                    <span class="nav-icon">♙</span> Team
+                </a>
+                <a href="manager-reports.php" class="nav-item">
+                    <span class="nav-icon">▥</span> Reports
+                </a>
+            <?php endif; ?>
 
-
-            <a
-                href="manager-dashboard.php"
-                class="nav-item"
-            >
-
-                <span class="nav-icon">
-                    ▦
-                </span>
-
-                Dashboard
-
+            <p class="nav-title">ACCOUNT</p>
+            <a href="profile.php" class="nav-item">
+                <span class="nav-icon">◉</span> My Profile
             </a>
-
-
-            <a
-                href="manager-projects.php"
-                class="nav-item"
-            >
-
-                <span class="nav-icon">
-                    ▣
-                </span>
-
-                My Projects
-
-            </a>
-
-
-            <a
-                href="manager-tasks.php"
-                class="nav-item active"
-            >
-
-                <span class="nav-icon">
-                    ✓
-                </span>
-
-                Tasks
-
-            </a>
-
-
-            <p class="nav-title">
-                WORKSPACE
-            </p>
-
-
-            <a
-                href="manager-team.php"
-                class="nav-item"
-            >
-
-                <span class="nav-icon">
-                    ♙
-                </span>
-
-                Team
-
-            </a>
-
-
-            <a
-                href="manager-reports.php"
-                class="nav-item"
-            >
-
-                <span class="nav-icon">
-                    ▥
-                </span>
-
-                Reports
-
-            </a>
-
-
-            <p class="nav-title">
-                ACCOUNT
-            </p>
-
-
-            <a
-                href="profile.php"
-                class="nav-item"
-            >
-
-                <span class="nav-icon">
-                    ◉
-                </span>
-
-                My Profile
-
-            </a>
-
 
         </nav>
 
@@ -768,19 +758,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 <div class="admin-profile">
 
 
-                    <div class="profile-avatar">
-
-                        <?= htmlspecialchars(
-                            strtoupper(
-                                substr(
-                                    $manager_name,
-                                    0,
-                                    2
-                                )
-                            )
-                        ) ?>
-
-                    </div>
+                    <?= render_avatar($_SESSION["profile_image"] ?? null, $manager_name, (int)($_SESSION["user_id"])) ?>
 
 
                     <div class="profile-info">
@@ -795,7 +773,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
                         <span>
-                            Project Manager
+                            <?= $role === "admin" ? "Administrator" : "Project Manager" ?>
                         </span>
 
                     </div>
@@ -848,7 +826,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 <div class="page-actions">
 
                     <a
-                        href="manager-tasks.php"
+                        href="<?= ($role === "admin") ? "tasks.php" : "manager-tasks.php" ?>"
                         class="secondary-button"
                     >
                         ← Back to Tasks
@@ -925,6 +903,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                             id="project_id"
                             name="project_id"
                             required
+                            onchange="loadProjectMembers(this.value)"
                         >
 
 
@@ -1053,48 +1032,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
                             <option value="">
-                                Unassigned
+                                Select a project first...
                             </option>
 
 
-                            <?php foreach (
-                                $members
-                                as $member
-                            ): ?>
-
-
-                                <option
-                                    value="<?= (int)$member["id"] ?>"
-                                    <?= (
-                                        isset(
-                                            $_POST["assigned_to"]
-                                        )
-                                        &&
-                                        (int)$_POST["assigned_to"]
-                                        ===
-                                        (int)$member["id"]
-                                    )
-                                        ? "selected"
-                                        : ""
-                                    ?>
-                                >
-
-                                    <?= htmlspecialchars(
-                                        $member["full_name"]
-                                    ) ?>
-
-                                    —
-                                    <?= htmlspecialchars(
-                                        $member["email"]
-                                    ) ?>
-
-                                </option>
-
-
-                            <?php endforeach; ?>
-
-
                         </select>
+
+                        <small class="form-warning" id="memberLoadNote" style="display:none;">
+                            No members found for this project. Add members to the project first.
+                        </small>
 
 
                     </div>
@@ -1224,7 +1170,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 
                         <a
-                            href="manager-tasks.php"
+                            href="<?= ($role === "admin") ? "tasks.php" : "manager-tasks.php" ?>"
                             class="secondary-button"
                         >
                             Cancel
@@ -1264,6 +1210,40 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 <?php include "cookie_consent.php"; ?>
 <script src="dark_mode.php"></script>
 <script src="assets/js/responsive.js"></script>
+<script>
+function loadProjectMembers(projectId) {
+    var sel = document.getElementById('assigned_to');
+    var note = document.getElementById('memberLoadNote');
+    if (!projectId) {
+        sel.innerHTML = '<option value="">Select a project first...</option>';
+        if (note) note.style.display = 'none';
+        return;
+    }
+    sel.innerHTML = '<option value="">Loading members...</option>';
+    if (note) note.style.display = 'none';
+    fetch('api/project_members.php?project_id=' + projectId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var members = data.members || [];
+            var html = '<option value="">Unassigned</option>';
+            members.forEach(function(m) {
+                html += '<option value="' + m.id + '">' + m.full_name + ' — ' + m.email + '</option>';
+            });
+            sel.innerHTML = html;
+            if (note) note.style.display = members.length === 0 ? 'block' : 'none';
+        })
+        .catch(function() {
+            sel.innerHTML = '<option value="">Error loading members</option>';
+        });
+}
+/* Load members on page load if a project is already selected */
+(function() {
+    var projSel = document.getElementById('project_id');
+    if (projSel && projSel.value) {
+        loadProjectMembers(projSel.value);
+    }
+})();
+</script>
 </body>
 
 </html>

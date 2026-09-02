@@ -1,0 +1,9 @@
+[Wed Sep  2 07:13:55 2026] PHP 8.3.28 Development Server (http://localhost:8080) started
+[Wed Sep  2 07:14:43 2026] [::1]:54509 Accepted
+[Wed Sep  2 07:14:47 2026] [::1]:54509 [200]: GET /profile.php - Uncaught mysqli_sql_exception: No connection could be made because the target machine actively refused it in C:\wamp64\www\project_man\config\database.php:22
+Stack trace:
+#0 C:\wamp64\www\project_man\config\database.php(22): mysqli_connect('localhost', 'root', Object(SensitiveParameterValue), 'project_man')
+#1 C:\wamp64\www\project_man\profile.php(5): require_once('C:\\wamp64\\www\\p...')
+#2 {main}
+  thrown in C:\wamp64\www\project_man\config\database.php on line 22
+[Wed Sep  2 07:14:47 2026] [::1]:54509 Closing

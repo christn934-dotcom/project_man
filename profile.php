@@ -11,6 +11,7 @@ require_once "config/database.php";
 */
 
 require_once "auth_check.php";
+require_once "avatar_helper.php";
 
 /* Update last_seen_at for notification badge tracking */
 $__ls_uid = $_SESSION["user_id"] ?? 0;
@@ -42,6 +43,118 @@ $user_id = (int) $_SESSION["user_id"];
 $success = "";
 $error = "";
 
+/*
+|--------------------------------------------------------------------------
+| HANDLE PROFILE PICTURE UPLOAD
+|--------------------------------------------------------------------------
+*/
+
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
+
+    /*
+    |----------------------------------------------------------------------
+    | UPLOAD PICTURE
+    |----------------------------------------------------------------------
+    */
+
+    if ($_POST["action"] === "upload_picture" && isset($_FILES["profile_picture"])) {
+
+        $file = $_FILES["profile_picture"];
+        $allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+        $max_size = 5 * 1024 * 1024; // 5MB
+
+        if ($file["error"] !== UPLOAD_ERR_OK) {
+            $error = "Failed to upload file. Please try again.";
+        } elseif (!in_array($file["type"], $allowed_types)) {
+            $error = "Invalid file type. Please upload a JPG, PNG, GIF, or WebP image.";
+        } elseif ($file["size"] > $max_size) {
+            $error = "File is too large. Maximum size is 5 MB.";
+        } else {
+
+            // Validate MIME type from actual file content
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $real_type = finfo_file($finfo, $file["tmp_name"]);
+            finfo_close($finfo);
+
+            if (!in_array($real_type, $allowed_types)) {
+                $error = "Invalid file type detected. Please upload a valid image.";
+            } else {
+
+                // Generate a unique filename
+                $ext = pathinfo($file["name"], PATHINFO_EXTENSION);
+                if ($ext === "") {
+                    $ext = "jpg";
+                }
+                $ext = strtolower($ext);
+                $new_filename = "avatar_" . $user_id . "_" . time() . "." . $ext;
+                $upload_dir = __DIR__ . "/uploads/profile_pictures/";
+
+                // Create directory if it doesn't exist
+                if (!is_dir($upload_dir)) {
+                    mkdir($upload_dir, 0755, true);
+                }
+
+                // Delete old profile picture if exists
+                if (!empty($user["profile_image"])) {
+                    $old_file = $upload_dir . basename($user["profile_image"]);
+                    if (file_exists($old_file)) {
+                        unlink($old_file);
+                    }
+                }
+
+                // Move the uploaded file
+                if (move_uploaded_file($file["tmp_name"], $upload_dir . $new_filename)) {
+
+                    // Update the database
+                    $query = "UPDATE users SET profile_image = ? WHERE id = ? LIMIT 1";
+                    $stmt = mysqli_prepare($conn, $query);
+                    if ($stmt) {
+                        mysqli_stmt_bind_param($stmt, "si", $new_filename, $user_id);
+                        if (mysqli_stmt_execute($stmt)) {
+                            $user["profile_image"] = $new_filename;
+                            $_SESSION["profile_image"] = $new_filename;
+                            $success = "Profile picture updated successfully.";
+                        } else {
+                            $error = "Failed to save profile picture.";
+                        }
+                        mysqli_stmt_close($stmt);
+                    }
+                } else {
+                    $error = "Failed to move uploaded file.";
+                }
+            }
+        }
+    }
+
+    /*
+    |----------------------------------------------------------------------
+    | REMOVE PICTURE
+    |----------------------------------------------------------------------
+    */
+
+    if ($_POST["action"] === "remove_picture") {
+
+        if (!empty($user["profile_image"])) {
+            $old_file = __DIR__ . "/uploads/profile_pictures/" . basename($user["profile_image"]);
+            if (file_exists($old_file)) {
+                unlink($old_file);
+            }
+
+            $query = "UPDATE users SET profile_image = NULL WHERE id = ? LIMIT 1";
+            $stmt = mysqli_prepare($conn, $query);
+            if ($stmt) {
+                mysqli_stmt_bind_param($stmt, "i", $user_id);
+                if (mysqli_stmt_execute($stmt)) {
+                    $user["profile_image"] = null;
+                    unset($_SESSION["profile_image"]);
+                    $success = "Profile picture removed.";
+                }
+                mysqli_stmt_close($stmt);
+            }
+        }
+    }
+}
+
 
 /*
 |--------------------------------------------------------------------------
@@ -57,7 +170,8 @@ $query = "
         full_name,
         email,
         role,
-        status
+        status,
+        profile_image
     FROM users
     WHERE id = ?
     LIMIT 1
@@ -103,7 +217,7 @@ if (!$user) {
 |--------------------------------------------------------------------------
 */
 
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"])) {
 
     $action = $_POST["action"] ?? "";
 
@@ -507,6 +621,61 @@ if (count($name_parts) >= 2) {
 
             font-size: 30px;
             font-weight: 700;
+            overflow: hidden;
+        }
+
+        .large-profile-avatar img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .avatar-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 5px auto 15px;
+        }
+
+        .avatar-upload-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 6px 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: #fff;
+            color: #374151;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .avatar-upload-btn:hover {
+            background: #f3f4f6;
+            border-color: #9ca3af;
+        }
+
+        .avatar-remove-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 6px 14px;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            background: #fff;
+            color: #dc2626;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .avatar-remove-btn:hover {
+            background: #fef2f2;
+            border-color: #f87171;
         }
 
         .profile-summary h2 {
@@ -636,9 +805,6 @@ if (count($name_parts) >= 2) {
 
 
 <body>
-<script>
-(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
-</script>
 
 
 <div class="admin-layout">
@@ -842,8 +1008,8 @@ if (count($name_parts) >= 2) {
                     onclick="toggleTheme()"
                     title="Toggle Theme"
                 >
-                    <span class="theme-icon-light">☀️</span>
-                    <span class="theme-icon-dark">🌙</span>
+                    <span class="theme-icon-light"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></span>
+                    <span class="theme-icon-dark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
                 </button>
 <button
                     class="notification-button"
@@ -851,7 +1017,7 @@ if (count($name_parts) >= 2) {
                     onclick="window.location.href='notifications.php'"
                     style="position:relative;"
                 >
-                    🔔
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                     <span class="notification-dot" id="notifBadge" style="display:none;"></span>
                 </button>
 
@@ -859,11 +1025,7 @@ if (count($name_parts) >= 2) {
                 <div class="admin-profile">
 
 
-                    <div class="profile-avatar">
-
-                        <?= htmlspecialchars($initials) ?>
-
-                    </div>
+                    <?= render_avatar($user["profile_image"] ?? null, $user["full_name"], $user_id) ?>
 
 
                     <div class="profile-info">
@@ -966,10 +1128,28 @@ if (count($name_parts) >= 2) {
                 <div class="dashboard-card profile-summary">
 
 
-                    <div class="large-profile-avatar">
+                    <?= render_avatar($user["profile_image"] ?? null, $user["full_name"], $user_id, 'lg') ?>
 
-                        <?= htmlspecialchars($initials) ?>
 
+                    <!-- Upload / Remove photo -->
+                    <div class="avatar-actions">
+                        <form method="POST" enctype="multipart/form-data" class="avatar-upload-form">
+                            <input type="hidden" name="action" value="upload_picture">
+                            <label for="profile_picture" class="avatar-upload-btn">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                                <?= ($user["profile_image"] ?? null) ? 'Change Photo' : 'Upload Photo' ?>
+                            </label>
+                            <input type="file" id="profile_picture" name="profile_picture" accept="image/*" style="display:none;" onchange="this.form.submit();">
+                        </form>
+                        <?php if (!empty($user["profile_image"])): ?>
+                            <form method="POST" class="avatar-remove-form">
+                                <input type="hidden" name="action" value="remove_picture">
+                                <button type="submit" class="avatar-remove-btn" onclick="return confirm('Remove your profile picture?');">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                    Remove
+                                </button>
+                            </form>
+                        <?php endif; ?>
                     </div>
 
 

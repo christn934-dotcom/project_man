@@ -8,6 +8,7 @@ require_once "config/database.php";
 /*|--------------------------------------------------------------------------| CHECK LOGIN|--------------------------------------------------------------------------|*/
 
 require_once "auth_check.php";
+require_once "avatar_helper.php";;
 
 
 $role = $_SESSION["role"] ?? "";
@@ -19,6 +20,14 @@ if ($upd_stmt) {
     mysqli_stmt_bind_param($upd_stmt, "i", $_SESSION["user_id"]);
     mysqli_stmt_execute($upd_stmt);
     mysqli_stmt_close($upd_stmt);
+}
+
+/* Mark user-specific notifications as read */
+$mark_read = mysqli_prepare($conn, "UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0");
+if ($mark_read) {
+    mysqli_stmt_bind_param($mark_read, "i", $_SESSION["user_id"]);
+    mysqli_stmt_execute($mark_read);
+    mysqli_stmt_close($mark_read);
 }
 
 
@@ -169,6 +178,43 @@ if ($role === "admin") {
 }
 
 
+/*|--------------------------------------------------------------------------| MERGE USER-SPECIFIC NOTIFICATIONS|--------------------------------------------------------------------------|
+| Also fetch notifications from the notifications table (task assignments, etc.)
+|--------------------------------------------------------------------------|*/
+
+$notif_user_id = (int) $_SESSION["user_id"];
+$notif_query = "
+    SELECT title AS action, message AS description, created_at,
+           '' AS full_name, '' AS project_name
+    FROM notifications
+    WHERE user_id = ?
+    ORDER BY created_at DESC
+    LIMIT 20
+";
+$notif_stmt = mysqli_prepare($conn, $notif_query);
+if ($notif_stmt) {
+    mysqli_stmt_bind_param($notif_stmt, "i", $notif_user_id);
+    mysqli_stmt_execute($notif_stmt);
+    $notif_result = mysqli_stmt_get_result($notif_stmt);
+    if ($notif_result) {
+        while ($row = mysqli_fetch_assoc($notif_result)) {
+            $notifications[] = $row;
+        }
+    }
+    mysqli_stmt_close($notif_stmt);
+}
+
+/* Sort all notifications by date descending */
+usort($notifications, function($a, $b) {
+    return strtotime($b["created_at"]) - strtotime($a["created_at"]);
+});
+
+/* Trim to 30 most recent */
+$notifications = array_slice($notifications, 0, 30);
+
+
+
+
 /*|--------------------------------------------------------------------------| ACTION ICON|--------------------------------------------------------------------------|*/
 
 function notif_icon($action) {
@@ -179,9 +225,15 @@ function notif_icon($action) {
         "task_created"    => "✓",
         "task_updated"    => "✎",
         "task_deleted"    => "✕",
+        "task_assigned"   => "✓",
+        "task_approved"   => "✓",
+        "task_rejected"   => "✎",
         "user_created"    => "♙",
         "user_updated"    => "✎",
         "user_deleted"    => "✕",
+        "New Task Assigned" => "✓",
+        "Task Approved"   => "✓",
+        "Task Sent Back"  => "✎",
     ];
     return $icons[$action] ?? "•";
 }
@@ -209,7 +261,7 @@ function notif_icon($action) {
 </head>
 <body>
 <script>
-(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark'){document.body.classList.add('dark');document.body.classList.remove('light')}else if(t==='light'){document.body.classList.add('light');document.body.classList.remove('dark')}})();
 </script>
 
 <div class="admin-layout">
@@ -261,8 +313,8 @@ function notif_icon($action) {
                     onclick="toggleTheme()"
                     title="Toggle Theme"
                 >
-                    <span class="theme-icon-light">☀️</span>
-                    <span class="theme-icon-dark">🌙</span>
+                    <span class="theme-icon-light"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></span>
+                    <span class="theme-icon-dark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
                 </button>
 <button
                     class="notification-button"
@@ -270,12 +322,12 @@ function notif_icon($action) {
                     onclick="window.location.href='notifications.php'"
                     style="position:relative;"
                 >
-                    🔔
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                     <span class="notification-dot" id="notifBadge" style="display:none;"></span>
                 </button>
 
                 <div class="admin-profile">
-                    <div class="profile-avatar"><?= htmlspecialchars(strtoupper(substr($user_name, 0, 2))) ?></div>
+                    <?= render_avatar($_SESSION["profile_image"] ?? null, $user_name, (int)($_SESSION["user_id"])) ?>
                     <div class="profile-info"><strong><?= htmlspecialchars($user_name) ?></strong><span><?= htmlspecialchars($role_label) ?></span></div>
                     <span class="profile-arrow">▾</span>
                 </div>

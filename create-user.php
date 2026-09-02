@@ -95,6 +95,12 @@ if ($error === "") {
         mysqli_stmt_close($lstmt);
     }
 
+    /* Welcome email to new user */
+    $new_user_id = mysqli_insert_id($conn);
+    $welcome_subject = "Welcome to PROMASY!";
+    $welcome_body = "Hello $full_name,\n\nWelcome to PROMASY — Project Management System!\n\nYour account has been created by an administrator. You can now log in and start collaborating with your team.\n\n- The PROMASY Team";
+    send_user_notification_email($conn, $new_user_id, $welcome_subject, $welcome_body);
+
     header("Location: users.php?created=1");
         exit;
     } else {

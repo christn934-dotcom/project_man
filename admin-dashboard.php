@@ -5,6 +5,7 @@ session_start();
 require_once "config/database.php";
 
 require_once "auth_check.php";
+require_once "avatar_helper.php";;
 
 /* Update last_seen_at for notification badge tracking */
 $__ls_uid = $_SESSION["user_id"] ?? 0;
@@ -305,15 +306,18 @@ $query = "
         p.name,
         p.end_date,
         p.priority,
-        u.full_name AS manager_name
+        p.status,
+        u.full_name AS manager_name,
+        DATEDIFF(p.end_date, CURDATE()) AS days_remaining
     FROM projects p
     INNER JOIN users u
         ON p.manager_id = u.id
     WHERE p.end_date IS NOT NULL
-      AND p.end_date >= CURDATE()
       AND p.status != 'completed'
+      AND p.end_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+      AND p.end_date <= DATE_ADD(CURDATE(), INTERVAL 14 DAY)
     ORDER BY p.end_date ASC
-    LIMIT 5
+    LIMIT 10
 ";
 
 $result = mysqli_query($conn, $query);
@@ -511,6 +515,13 @@ if ($total_users > 0) {
             background: #f8fafc;
         }
 
+    /* Dark mode text overrides */
+    body.dark .progress-label span { color: #94a3b8; }
+    body.dark .progress-label strong { color: #f1f5f9; }
+    body.dark .progress-fill { background: #818cf8; }
+    body.dark .overview-number { color: #f1f5f9; }
+    body.dark .dashboard-stat-link:hover { background: rgba(99, 102, 241, 0.04); }
+
     </style>
 
 </head>
@@ -518,7 +529,7 @@ if ($total_users > 0) {
 
 <body>
 <script>
-(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark'){document.body.classList.add('dark');document.body.classList.remove('light')}else if(t==='light'){document.body.classList.add('light');document.body.classList.remove('dark')}})();
 </script>
 
 
@@ -744,8 +755,8 @@ if ($total_users > 0) {
                     onclick="toggleTheme()"
                     title="Toggle Theme"
                 >
-                    <span class="theme-icon-light">☀️</span>
-                    <span class="theme-icon-dark">🌙</span>
+                    <span class="theme-icon-light"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></span>
+                    <span class="theme-icon-dark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
                 </button>
 <button
                     class="notification-button"
@@ -753,7 +764,7 @@ if ($total_users > 0) {
                     onclick="window.location.href='notifications.php'"
                     style="position:relative;"
                 >
-                    🔔
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                     <span class="notification-dot" id="notifBadge" style="display:none;"></span>
                 </button>
 
@@ -761,19 +772,7 @@ if ($total_users > 0) {
                 <div class="admin-profile">
 
 
-                    <div class="profile-avatar">
-
-                        <?= e(
-                            strtoupper(
-                                substr(
-                                    $admin_name,
-                                    0,
-                                    2
-                                )
-                            )
-                        ) ?>
-
-                    </div>
+                    <?= render_avatar($_SESSION["profile_image"] ?? null, $admin_name, (int)($_SESSION["user_id"])) ?>
 
 
                     <div class="profile-info">
@@ -1538,8 +1537,16 @@ if ($total_users > 0) {
                             <?php foreach ($upcoming_deadlines as $deadline): ?>
 
 
+                                <?php
+                                    $days = (int)($deadline['days_remaining'] ?? 0);
+                                    $is_overdue = $days < 0;
+                                    $is_due_today = $days === 0;
+                                    $is_due_soon = $days > 0 && $days <= 3;
+                                    $deadline_class = $is_overdue ? 'overdue' : ($is_due_today ? 'due-today' : ($is_due_soon ? 'due-soon' : ''));
+                                ?>
+
                                 <div
-                                    class="deadline-item clickable-row"
+                                    class="deadline-item clickable-row <?= $deadline_class ?>"
                                     onclick="window.location.href='project.php?id=<?= (int)$deadline["id"] ?>'"
                                 >
 
@@ -1551,8 +1558,15 @@ if ($total_users > 0) {
                                         </strong>
 
                                         <span>
-                                            Due:
-                                            <?= e(format_date($deadline["end_date"])) ?>
+                                            <?php if ($is_overdue): ?>
+                                                <span class="deadline-overdue">Overdue by <?= abs($days) ?> day<?= abs($days) !== 1 ? 's' : '' ?></span>
+                                            <?php elseif ($is_due_today): ?>
+                                                <span class="deadline-today">Due today</span>
+                                            <?php elseif ($is_due_soon): ?>
+                                                <span class="deadline-soon">Due in <?= $days ?> day<?= $days !== 1 ? 's' : '' ?></span>
+                                            <?php else: ?>
+                                                Due: <?= e(format_date($deadline["end_date"])) ?>
+                                            <?php endif; ?>
                                         </span>
 
                                         <small class="deadline-manager">

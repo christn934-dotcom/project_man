@@ -12,6 +12,7 @@ require_once "config/database.php";
 */
 
 require_once "auth_check.php";
+require_once "avatar_helper.php";;
 require_once "send_email_notification.php";
 
 if (!isset($_SESSION["role"]) || $_SESSION["role"] !== "admin") {
@@ -164,6 +165,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     email,
                     password,
                     role,
+                        profile_image,
                     status
                 )
                 VALUES
@@ -207,6 +209,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     mysqli_stmt_execute($lstmt);
                     mysqli_stmt_close($lstmt);
                 }
+
+                /* Welcome email to new user */
+                $new_user_id = mysqli_insert_id($conn);
+                $welcome_subject = "Welcome to PROMASY!";
+                $welcome_body = "Hello $full_name,\n\nWelcome to PROMASY — Project Management System!\n\nYour account has been created by an administrator. You can now log in and start collaborating with your team.\n\n- The PROMASY Team";
+                send_user_notification_email($conn, $new_user_id, $welcome_subject, $welcome_body);
 
                 $full_name = "";
                 $email = "";
@@ -257,7 +265,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 <body>
 <script>
-(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark'){document.body.classList.add('dark');document.body.classList.remove('light')}else if(t==='light'){document.body.classList.add('light');document.body.classList.remove('dark')}})();
 </script>
 
 <div class="admin-layout">
@@ -452,19 +460,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                 <div class="admin-profile">
 
-                    <div class="profile-avatar">
-
-                        <?= htmlspecialchars(
-                            strtoupper(
-                                substr(
-                                    $_SESSION["full_name"],
-                                    0,
-                                    2
-                                )
-                            )
-                        ) ?>
-
-                    </div>
+                    <?= render_avatar($_SESSION["profile_image"] ?? null, $_SESSION["full_name"], (int)($_SESSION["user_id"] ?? 0)) ?>
 
 
                     <div class="profile-info">

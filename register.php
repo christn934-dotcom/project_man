@@ -3,6 +3,7 @@
 session_start();
 
 require_once "config/database.php";
+require_once "send_email_notification.php";
 
 $error = "";
 $success = "";
@@ -136,6 +137,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                 $success =
                     "Account created successfully. You can now log in.";
+
+                /* Welcome email */
+                $new_user_id = mysqli_insert_id($conn);
+                $welcome_subject = "Welcome to PROMASY!";
+                $welcome_body = "Hello $full_name,\n\nWelcome to PROMASY — Project Management System!\n\nYour account has been created successfully. You can now log in and start collaborating with your team.\n\nIf you have any questions, contact your administrator.\n\n- The PROMASY Team";
+                send_user_notification_email($conn, $new_user_id, $welcome_subject, $welcome_body);
 
             } else {
 

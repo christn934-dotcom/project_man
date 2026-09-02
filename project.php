@@ -213,13 +213,26 @@ if ($role === "admin") {
         .member-details small { color: #777; }
         .empty-small { padding: 25px 10px; text-align: center; color: #777; }
         .status-priority-row { display: flex; gap: 10px; margin-top: 12px; }
+        .status-workflow { display: flex; align-items: center; gap: 0; margin-top: 20px; padding: 18px; background: #f8f9fb; border-radius: 10px; }
+        .workflow-step { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; color: #9ca3af; transition: all 0.3s; }
+        .workflow-step.active { background: #4f46e5; color: #fff; box-shadow: 0 2px 10px rgba(79,70,229,0.3); }
+        .workflow-step.done { background: #ecfdf5; color: #059669; }
+        .workflow-step.hold { background: #fff7ed; color: #ea580c; }
+        .workflow-step.cancelled { background: #fef2f2; color: #dc2626; }
+        .workflow-step.pending { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+        .workflow-arrow { color: #d1d5db; font-size: 16px; margin: 0 4px; }
+        .workflow-arrow.done { color: #059669; }
+        body.dark .status-workflow { background: #1a1d24; }
+        body.dark .workflow-step { color: #6b7280; }
+        body.dark .workflow-arrow { color: #374151; }
+        .task-flow-label { font-size: 12px; color: #9ca3af; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
         @media (max-width: 900px) { .details-grid { grid-template-columns: 1fr; } .project-details-header { flex-direction: column; } }
-        @media (max-width: 600px) { .project-info-grid { grid-template-columns: 1fr; } .task-summary-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 600px) { .project-info-grid { grid-template-columns: 1fr; } .task-summary-grid { grid-template-columns: 1fr; } .workflow-step { padding: 6px 10px; font-size: 11px; } }
     </style>
 </head>
 <body>
 <script>
-(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark'){document.body.classList.add('dark');document.body.classList.remove('light')}else if(t==='light'){document.body.classList.add('light');document.body.classList.remove('dark')}})();
 </script>
 
 <div class="admin-layout">
@@ -266,8 +279,8 @@ if ($role === "admin") {
                     onclick="toggleTheme()"
                     title="Toggle Theme"
                 >
-                    <span class="theme-icon-light">☀️</span>
-                    <span class="theme-icon-dark">🌙</span>
+                    <span class="theme-icon-light"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></span>
+                    <span class="theme-icon-dark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
                 </button>
 <button
                     class="notification-button"
@@ -275,7 +288,7 @@ if ($role === "admin") {
                     onclick="window.location.href='notifications.php'"
                     style="position:relative;"
                 >
-                    🔔
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                     <span class="notification-dot" id="notifBadge" style="display:none;"></span>
                 </button>
 
@@ -325,6 +338,40 @@ if ($role === "admin") {
                     <div class="progress-section">
                         <div class="progress-header"><strong>Project Progress</strong><strong><?= $progress ?>%</strong></div>
                         <div class="progress-bar"><div class="progress-fill" style="width: <?= $progress ?>%;"></div></div>
+                    </div>
+                    <?php
+                    $workflow = [
+                        ["planning", "Planning"],
+                        ["in_progress", "In Progress"],
+                        ["pending_approval", "⏳ Approval"],
+                        ["completed", "Completed"],
+                    ];
+                    $statuses_order = ["planning" => 0, "in_progress" => 1, "pending_approval" => 2, "completed" => 3];
+                    $current_idx = $statuses_order[$project["status"]] ?? -1;
+                    $is_on_hold = ($project["status"] === "on_hold");
+                    $is_cancelled = ($project["status"] === "cancelled");
+                    ?>
+                    <div class="status-workflow">
+                        <?php foreach ($workflow as $i => [$val, $label]): ?>
+                            <?php if ($i > 0): ?>
+                                <span class="workflow-arrow <?= ($i <= $current_idx && !$is_cancelled) ? 'done' : '' ?>">→</span>
+                            <?php endif; ?>
+                            <div class="workflow-step <?=
+                                $is_cancelled ? 'cancelled' :
+                                ($val === $project['status'] ? 'active' : '') .
+                                ($i < $current_idx && !$is_cancelled ? ' done' : '') .
+                                ($is_on_hold && $val === 'in_progress' ? ' hold' : '')
+                            ?>">
+                                <?= ($i < $current_idx && !$is_cancelled && !$is_on_hold) ? '✓ ' : '' ?><?= $label ?>
+                            </div>
+                        <?php endforeach; ?>
+                        <?php if ($is_on_hold): ?>
+                            <span class="workflow-arrow">→</span>
+                            <div class="workflow-step hold">⏸ On Hold</div>
+                        <?php elseif ($is_cancelled): ?>
+                            <span class="workflow-arrow">→</span>
+                            <div class="workflow-step cancelled">✕ Cancelled</div>
+                        <?php endif; ?>
                     </div>
                 </div>
 

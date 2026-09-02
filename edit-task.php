@@ -8,6 +8,7 @@ require_once "config/database.php";
 /*|--------------------------------------------------------------------------| CHECK LOGIN|--------------------------------------------------------------------------|*/
 
 require_once "auth_check.php";
+require_once "avatar_helper.php";;
 require_once "send_email_notification.php";
 
 
@@ -84,7 +85,7 @@ if ($role === "admin") {
 } else {
     $query = "SELECT id, name FROM projects WHERE manager_id = ? ORDER BY name ASC";
     $stmt = mysqli_prepare($conn, $query);
-    mysqli_stmt_bind_param($stmt, "i", $user_id);
+    mysqli_stmt_bind_param($stmt, "i", (int)($_SESSION["user_id"]));
     mysqli_stmt_execute($stmt);
     $result = mysqli_stmt_get_result($stmt);
     mysqli_stmt_close($stmt);
@@ -101,13 +102,31 @@ if ($result) {
 
 $members = [];
 
-$query = "SELECT id, full_name, email FROM users WHERE role = 'member' AND status = 'active' ORDER BY full_name ASC";
-$result = mysqli_query($conn, $query);
+/* Get the task's project_id first */
+$task_project_id = (int) ($task["project_id"] ?? 0);
 
-if ($result) {
-    while ($row = mysqli_fetch_assoc($result)) {
-        $members[] = $row;
+/* Only show members who belong to this project (manager + project members) */
+if ($task_project_id > 0) {
+    $query = "
+        SELECT DISTINCT u.id, u.full_name, u.email
+        FROM users u
+        WHERE u.status = 'active'
+        AND (
+            u.id IN (SELECT manager_id FROM projects WHERE id = ?)
+            OR u.id IN (SELECT user_id FROM project_members WHERE project_id = ?)
+        )
+        ORDER BY u.full_name ASC
+    ";
+    $stmt = mysqli_prepare($conn, $query);
+    mysqli_stmt_bind_param($stmt, "ii", $task_project_id, $task_project_id);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    if ($result) {
+        while ($row = mysqli_fetch_assoc($result)) {
+            $members[] = $row;
+        }
     }
+    mysqli_stmt_close($stmt);
 }
 
 
@@ -138,6 +157,39 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $error = "Invalid status.";
     }
 
+    /* Validate status transition */
+    if ($error === "" && $task_id > 0) {
+        $cur = mysqli_prepare($conn, "SELECT status FROM tasks WHERE id = ?");
+        mysqli_stmt_bind_param($cur, "i", $task_id);
+        mysqli_stmt_execute($cur);
+        $cur_result = mysqli_stmt_get_result($cur);
+        $cur_row = mysqli_fetch_assoc($cur_result);
+        mysqli_stmt_close($cur);
+        $current_status = $cur_row["status"] ?? "";
+
+        $valid_transitions = [
+            "to_do"       => ["in_progress"],
+            "in_progress" => ["review", "completed"],
+            "review"      => ["completed", "in_progress"],
+            "completed"   => [],
+        ];
+
+        if ($current_status !== $status && !in_array($status, $valid_transitions[$current_status] ?? [], true)) {
+            $error = "Cannot move task from '" . ucfirst(str_replace("_", " ", $current_status)) . "' to '" . ucfirst(str_replace("_", " ", $status)) . "'.";
+        }
+    }
+
+    /* Validate assigned member belongs to the project */
+    if ($error === "" && $assigned_to !== null && $project_id > 0) {
+        $chk = mysqli_prepare($conn, "SELECT 1 FROM users u WHERE u.id = ? AND u.status = 'active' AND (u.id IN (SELECT manager_id FROM projects WHERE id = ?) OR u.id IN (SELECT user_id FROM project_members WHERE project_id = ?)) LIMIT 1");
+        mysqli_stmt_bind_param($chk, "iii", $assigned_to, $project_id, $project_id);
+        mysqli_stmt_execute($chk);
+        $chk_result = mysqli_stmt_get_result($chk);
+        if (!$chk_result || mysqli_num_rows($chk_result) !== 1) {
+            $error = "That person is not a member of the selected project.";
+        }
+        mysqli_stmt_close($chk);
+    }
 
     if ($error === "") {
 
@@ -180,6 +232,31 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 $task_id
             );
 
+            /* In-app notification to assigned member */
+            if ($assigned_to !== null && $assigned_to > 0 && (int) $assigned_to !== (int) $task["assigned_to"]) {
+                $proj_name = $task["project_name"] ?? "";
+                if (empty($proj_name)) {
+                    $pn_stmt = mysqli_prepare($conn, "SELECT name FROM projects WHERE id = ? LIMIT 1");
+                    if ($pn_stmt) {
+                        mysqli_stmt_bind_param($pn_stmt, "i", $project_id);
+                        mysqli_stmt_execute($pn_stmt);
+                        $pn_result = mysqli_stmt_get_result($pn_stmt);
+                        if ($pn_row = mysqli_fetch_assoc($pn_result)) {
+                            $proj_name = $pn_row["name"];
+                        }
+                        mysqli_stmt_close($pn_stmt);
+                    }
+                }
+                $actor_name = $_SESSION["full_name"] ?? "Someone";
+                insert_user_notification(
+                    $conn,
+                    $assigned_to,
+                    "New Task Assigned",
+                    $actor_name . " assigned you the task \"" . $title . "\" in project \"" . $proj_name . "\"",
+                    "task_assigned"
+                );
+            }
+
             $redirect = ($role === "admin") ? "tasks.php" : "manager-tasks.php";
             header("Location: $redirect?updated=1");
             exit;
@@ -212,7 +289,7 @@ $is_admin = ($role === "admin");
 </head>
 <body>
 <script>
-(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark')document.body.classList.add('dark');else if(t==='light')document.body.classList.remove('dark');})();
+(function(){var t=localStorage.getItem('promasy-theme');if(t==='dark'){document.body.classList.add('dark');document.body.classList.remove('light')}else if(t==='light'){document.body.classList.add('light');document.body.classList.remove('dark')}})();
 </script>
 
 <div class="admin-layout">
@@ -291,7 +368,7 @@ $is_admin = ($role === "admin");
             </div>
             <div class="topbar-right">
                 <div class="admin-profile">
-                    <div class="profile-avatar"><?= htmlspecialchars(strtoupper(substr($user_name, 0, 2))) ?></div>
+                    <?= render_avatar($_SESSION["profile_image"] ?? null, $user_name, (int)($_SESSION["user_id"])) ?>
                     <div class="profile-info">
                         <strong><?= htmlspecialchars($user_name) ?></strong>
                         <span><?= htmlspecialchars($role_label) ?></span>

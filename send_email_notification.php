@@ -1,15 +1,21 @@
 <?php
+require_once "config/url.php";
 
 /**
  * Email Notification Helper
  * 
- * PRIMARY: PHP mail() — sends directly to each user's email address.
+ * PRIMARY: PHPMailer via Gmail SMTP — sends directly to each user's email.
  * FALLBACK: Formspree API — sends via your Formspree form.
  * 
  * Usage:
  *   require_once "send_email_notification.php";
  *   send_notification_email($conn, $action, $description, $project_id, $exclude_user_id);
  */
+
+/* Load PHPMailer */
+require_once __DIR__ . "/vendor/phpmailer/src/PHPMailer.php";
+require_once __DIR__ . "/vendor/phpmailer/src/SMTP.php";
+require_once __DIR__ . "/vendor/phpmailer/src/Exception.php";
 
 require_once __DIR__ . "/config/formspree.php";
 
@@ -163,15 +169,21 @@ function get_task_recipient_emails(
  */
 function action_label($action) {
     $labels = [
-        "task_created"    => "New Task Created",
-        "task_updated"    => "Task Updated",
-        "task_deleted"    => "Task Deleted",
-        "project_created" => "New Project Created",
-        "project_updated" => "Project Updated",
-        "project_deleted" => "Project Deleted",
-        "user_created"    => "New User Created",
-        "user_updated"    => "User Updated",
-        "user_deleted"    => "User Deleted",
+        "task_created"               => "New Task Created",
+        "task_updated"               => "Task Updated",
+        "task_deleted"               => "Task Deleted",
+        "task_submitted_for_review"  => "Task Submitted for Review",
+        "task_approved"              => "Task Approved",
+        "task_rejected"              => "Task Sent Back",
+        "project_created"            => "New Project Created",
+        "project_updated"            => "Project Updated",
+        "project_deleted"            => "Project Deleted",
+        "project_submitted_for_approval" => "Project Submitted for Approval",
+        "project_approved"           => "Project Approved",
+        "project_rejected"           => "Project Sent Back",
+        "user_created"               => "New User Created",
+        "user_updated"               => "User Updated",
+        "user_deleted"               => "User Deleted",
     ];
     return $labels[$action] ?? "Notification";
 }
@@ -186,7 +198,7 @@ function action_label($action) {
  */
 function build_notification_html($actor_name, $description, $project_name, $label) {
 
-    $login_url = "http://localhost:8080/dashboard.php";
+    $login_url = "<?php echo base_url(); ?>/dashboard.php";
 
     return '<!DOCTYPE html>
 <html>
@@ -259,7 +271,7 @@ function build_notification_text($actor_name, $description, $project_name, $labe
     $text .= "Project: $project_name\n\n";
     $text .= "$actor_name $description\n\n";
     $text .= "Log in to view details:\n";
-    $text .= "http://localhost:8080/dashboard.php\n\n";
+    $text .= "<?php echo base_url(); ?>/dashboard.php\n\n";
     $text .= "---\n";
     $text .= "This is an automated notification from PROMASY.\n";
 
@@ -268,10 +280,10 @@ function build_notification_text($actor_name, $description, $project_name, $labe
 
 
 /**
- * Send a single email via PHP mail().
+ * Send a single email via PHPMailer + Gmail SMTP.
  * Returns true on success, false on failure.
  */
-function send_php_mail($to, $subject, $html_body, $text_body) {
+function send_php_mail($to, $subject, $html_body, $text_body, $actor_email = '', $actor_name = '') {
 
     global $EMAIL_NOTIFICATIONS_ENABLED;
 
@@ -279,31 +291,61 @@ function send_php_mail($to, $subject, $html_body, $text_body) {
         return false;
     }
 
-    $boundary = md5(uniqid(time()));
+    /* Load SMTP config */
+    $smtp_config = __DIR__ . "/config/smtp.php";
+    if (!file_exists($smtp_config)) {
+        error_log("PROMASY: SMTP config not found at $smtp_config");
+        return false;
+    }
+    require_once $smtp_config;
 
-    $headers  = "From: PROMASY <noreply@promasy.local>\r\n";
-    $headers .= "Reply-To: PROMASY <noreply@promasy.local>\r\n";
-    $headers .= "X-Mailer: PHP/" . phpversion() . "\r\n";
-    $headers .= "MIME-Version: 1.0\r\n";
-    $headers .= "Content-Type: multipart/alternative; boundary=\"$boundary\"\r\n";
+    global $SMTP_HOST, $SMTP_PORT, $SMTP_USERNAME, $SMTP_PASSWORD, $SMTP_FROM, $SMTP_FROM_NAME, $SMTP_ENCRYPTION;
 
-    $message  = "--$boundary\r\n";
-    $message .= "Content-Type: text/plain; charset=UTF-8\r\n";
-    $message .= "Content-Transfer-Encoding: 7bit\r\n\r\n";
-    $message .= $text_body . "\r\n\r\n";
-    $message .= "--$boundary\r\n";
-    $message .= "Content-Type: text/html; charset=UTF-8\r\n";
-    $message .= "Content-Transfer-Encoding: 7bit\r\n\r\n";
-    $message .= $html_body . "\r\n\r\n";
-    $message .= "--$boundary--\r\n";
-
-    $result = @mail($to, $subject, $message, $headers);
-
-    if (!$result) {
-        error_log("PROMASY mail() failed for: $to");
+    if (empty($SMTP_USERNAME) || $SMTP_USERNAME === 'your-email@gmail.com') {
+        error_log("PROMASY: Gmail SMTP not configured. Edit config/smtp.php");
+        return false;
     }
 
-    return $result;
+    try {
+        $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+
+        /* Server settings */
+        $mail->isSMTP();
+        $mail->Host       = $SMTP_HOST;
+        $mail->SMTPAuth   = true;
+        $mail->Username   = $SMTP_USERNAME;
+        $mail->Password   = $SMTP_PASSWORD;
+        $mail->SMTPSecure = $SMTP_ENCRYPTION;
+        $mail->Port       = $SMTP_PORT;
+        $mail->CharSet    = 'UTF-8';
+
+        /*
+         * From: Use the logged-in user's email and name.
+         * Gmail SMTP will accept this if the triggering user's email
+         * is a valid address. Otherwise falls back to the system account.
+         */
+        if (!empty($actor_email) && !empty($actor_name)) {
+            $mail->setFrom($actor_email, $actor_name);
+        } else {
+            $mail->setFrom($SMTP_FROM, $SMTP_FROM_NAME);
+        }
+
+        /* Recipient */
+        $mail->addAddress($to);
+
+        /* Content */
+        $mail->isHTML(true);
+        $mail->Subject = $subject;
+        $mail->Body    = $html_body;
+        $mail->AltBody = $text_body;
+
+        $mail->send();
+        return true;
+
+    } catch (PHPMailer\PHPMailer\Exception $e) {
+        error_log("PROMASY SMTP failed for $to: " . $e->getMessage());
+        return false;
+    }
 }
 
 
@@ -384,12 +426,12 @@ function send_formspree_email($to, $subject, $body) {
  * @param string $text     Plain text body
  * @return bool
  */
-function send_single_email($to, $subject, $html, $text) {
+function send_single_email($to, $subject, $html, $text, $actor_email = '', $actor_name = '') {
 
-    // Try PHP mail() first (sends directly to user's email)
-    $sent = send_php_mail($to, $subject, $html, $text);
+    // Try PHPMailer via Gmail SMTP first
+    $sent = send_php_mail($to, $subject, $html, $text, $actor_email, $actor_name);
 
-    // If mail() fails, try Formspree as fallback
+    // If SMTP fails, try Formspree as fallback
     if (!$sent) {
         $sent = send_formspree_email($to, $subject, $text);
     }
@@ -456,18 +498,20 @@ function send_notification_email(
         return;
     }
 
-    /* Get the actor's name */
+    /* Get the actor's name and email */
     $actor_name = "Someone";
+    $actor_email = '';
     $astmt = mysqli_prepare(
         $conn,
-        "SELECT full_name FROM users WHERE id = ? LIMIT 1"
+        "SELECT full_name, email FROM users WHERE id = ? LIMIT 1"
     );
     if ($astmt) {
         mysqli_stmt_bind_param($astmt, "i", $exclude_user_id);
         mysqli_stmt_execute($astmt);
         $aresult = mysqli_stmt_get_result($astmt);
         if ($arow = mysqli_fetch_assoc($aresult)) {
-            $actor_name = $arow["full_name"];
+            $actor_name  = $arow["full_name"];
+            $actor_email = $arow["email"] ?? '';
         }
         mysqli_stmt_close($astmt);
     }
@@ -481,8 +525,24 @@ function send_notification_email(
     /* Send to each recipient at their own email address */
     foreach ($recipients as $email) {
         if (!empty($email)) {
-            send_single_email($email, $subject, $html, $text);
+            send_single_email($email, $subject, $html, $text, $actor_email, $actor_name);
         }
+    }
+}
+
+
+/**
+ * Insert a user-specific in-app notification.
+ * This writes to the notifications table so the bell badge and
+ * notifications page show targeted alerts (e.g. task assignments).
+ */
+function insert_user_notification($conn, $user_id, $title, $message, $type = 'general') {
+    if ($user_id <= 0) return;
+    $stmt = mysqli_prepare($conn, "INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)");
+    if ($stmt) {
+        mysqli_stmt_bind_param($stmt, 'isss', $user_id, $title, $message, $type);
+        mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
     }
 }
 
